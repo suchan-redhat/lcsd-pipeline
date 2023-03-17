@@ -154,12 +154,11 @@ pipeline {
                     def pom = readMavenPom file: pomFile
                     print "${pom.version}"
                     sh "mvn dependency:copy -Dartifact=${params.PACKAGE_ARTIFACT_GROUP}:${params.PACKAGE_ARTIFACT_NAME}:${pom.version} -DoutputDirectory=/tmp/"
-                }
-                dir('binary') {
-                    sh """
-                        mvn dependency:copy -Dartifact=${params.PACKAGE_ARTIFACT_GROUP}:${params.PACKAGE_ARTIFACT_NAME}:${pom.version} -DoutputDirectory=./
-                    """
-                    script {
+
+                    dir('binary') {
+                        sh """
+                            mvn dependency:copy -Dartifact=${params.PACKAGE_ARTIFACT_GROUP}:${params.PACKAGE_ARTIFACT_NAME}:${pom.version} -DoutputDirectory=./
+                        """
                         openshift.withCluster('smartplay-np'){
                             openshift.withProject('cicddemo-dev'){
                                 def result = openshift.raw("start-build --follow ${PACKAGE_BUILD_NAME} --from-file=./${params.PACKAGE_ARTIFACT_NAME}-${pom.version}.jar")
