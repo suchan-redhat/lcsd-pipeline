@@ -1,5 +1,14 @@
-def sonarHome =""
-def imagereference=""
+def sonarHome = ""
+def imagereference = ""
+def GITTEA_HOST = "gitea-app-cicd.smartplay-np.lcsd.hksarg"
+def GITTEA_OPS_HOST = "gitea-ops-cicd.smartplay-np.lcsd.hksarg"
+def GITTEA_OPS_ALICLOUD_HOST = "gitea-gitea"
+def DOCKER_HOST_ONPRIM = "docker-cicd.smartplay-np.lcsd.hksarg:8443"
+def DOCKER_GROUP_NAME = "cicd"
+def GITTEA_PORT = "2222"
+def GITTEA_OPS_PORT = "2222"
+def GITTEA_OPS_ALICLOUD_PORT = "2222"
+
 pipeline {
     agent {
         node {
@@ -7,11 +16,100 @@ pipeline {
         }
     }
     stages {
+        stage('Setup parameters') {
+            steps {
+                script {
+                    properties([
+                        parameters([
+                            // choice(
+                            //     choices: ['ONE', 'TWO'], 
+                            //     name: 'PARAMETER_01'
+                            // ),
+                            // booleanParam(
+                            //     defaultValue: true, 
+                            //     description: '', 
+                            //     name: 'BOOLEAN'
+                            // ),
+                            // text(
+                            //     defaultValue: '''
+                            //     this is a multi-line 
+                            //     string parameter example
+                            //     ''', 
+                            //      name: 'MULTI-LINE-STRING'
+                            // ),
+                            string(
+                                defaultValue: 'com.redhat.demo',
+                                name: 'PACKAGE_ARTIFACT_GROUP',
+                                trim: true
+                            ),
+                            string(
+                                defaultValue: 'springboot-helloworld',
+                                name: 'PACKAGE_ARTIFACT_NAME',
+                                trim: true
+                            ),
+                            string(
+                                defaultValue: 'demo',
+                                name: 'PACKAGE_BUILD_NAME',
+                                trim: true
+                            ),
+                            string(
+                                defaultValue: 'demo:latest',
+                                name: 'PACKAGE_BUILD_OUTPUT',
+                                trim: true
+                            ),
+                            string(
+                                defaultValue: 'demo',
+                                name: 'GITEA_OPS_ORGANIZATION',
+                                trim: true
+                            ),
+                            string(
+                                defaultValue: 'image-registry.openshift-image-registry.svc:5000/cicd-common/demo:latest',
+                                name: 'KUSTOMIZE_IMAGE_NAME',
+                                trim: true
+                            ),
+                            string(
+                                defaultValue: 'image-registry.openshift-image-registry.svc:5000/cicd-common/demo:latest',
+                                name: 'KUSTOMIZE_PROJECT_NAME',
+                                trim: true
+                            ),
+                            string(
+                                defaultValue: 'springboot-helloworld.git',
+                                name: 'GITEA_OPS_PROJECT',
+                                trim: true
+                            ),
+                            string(
+                                defaultValue: 'demo',
+                                name: 'GITEA_OPS_ALICLOUD_ORGANIZATION',
+                                trim: true
+                            ),
+                            string(
+                                defaultValue: 'springboot-helloworld.git',
+                                name: 'GITEA_OPS_ALICLOUD_PROJECT',
+                                trim: true
+                            ),
+                            string(
+                                defaultValue: 'demo',
+                                name: 'GITEA_APP_ORGANIZATION',
+                                trim: true
+                            ),
+                            string(
+                                defaultValue: 'springboot-helloworld.git',
+                                name: 'GITEA_APP_PROJECT',
+                                trim: true
+                            )
+                        ])
+                    ])
+                }
+            }
+        }
         stage('checkout') {
             steps {
-                sh 'mvn -v'
-                sh 'env'
-                checkout([$class: 'GitSCM', branches: [[name: '*/main']], userRemoteConfigs:[[credentialsId: 'GITEA-APPS-DEPLOY', url:'ssh://git@gitea-app-cicd.smartplay-np.lcsd.hksarg:2222/demo/springboot-helloworld.git']]  ])
+                checkout(
+                    [
+                        $class: 'GitSCM', branches: [[name: '*/main']],
+                        userRemoteConfigs:[[credentialsId: 'GITEA-APPS-DEPLOY',
+                        url:"ssh://git@${GITTEA_HOST}:${GITTEA_PORT}/${params.GITEA_APP_ORGANIZATION}/${params.GITEA_APP_PROJECT}"]]
+                    ])
             }
         }
         stage('test') {
@@ -55,18 +153,16 @@ pipeline {
                     def pomFile = 'pom.xml'
                     def pom = readMavenPom file: pomFile
                     print "${pom.version}"
-                    sh 'mvn dependency:copy -Dartifact=com.redhat.demo:springboot-helloworld:0.0.1 -DoutputDirectory=/tmp/'
+                    sh "mvn dependency:copy -Dartifact=${params.PACKAGE_ARTIFACT_GROUP}:${params.PACKAGE_ARTIFACT_NAME}:${pom.version} -DoutputDirectory=/tmp/"
                 }
                 dir('binary') {
-                    sh '''
-                        mvn dependency:copy -Dartifact=com.redhat.demo:springboot-helloworld:0.0.1 -DoutputDirectory=./
-                        #oc login --insecure-skip-tls-verify -u cicd -pCicd#lcsd2022 https://api.nonp-cluster.smartplay-np.lcsd.hksarg:6443
-                        #oc -n cicddemo-dev start-build demo --from-file=./springboot-helloworld-0.0.1.jar
-                    '''
+                    sh """
+                        mvn dependency:copy -Dartifact=${params.PACKAGE_ARTIFACT_GROUP}:${params.PACKAGE_ARTIFACT_NAME}:${pom.version} -DoutputDirectory=./
+                    """
                     script {
                         openshift.withCluster('smartplay-np'){
                             openshift.withProject('cicddemo-dev'){
-                                def result = openshift.raw('start-build --follow demo --from-file=./springboot-helloworld-0.0.1.jar')
+                                def result = openshift.raw("start-build --follow ${PACKAGE_BUILD_NAME} --from-file=./${params.PACKAGE_ARTIFACT_NAME}-${pom.version}.jar")
                                 echo "${result.out}"
                                 sh "exit ${result.status}"
                             }
@@ -78,9 +174,9 @@ pipeline {
         stage('Scan new build in ACS') {
             steps {
                 withCredentials([string(credentialsId: 'ACS_TOKEN', variable: 'ROX_API_TOKEN'), string(credentialsId: 'ACS_URL', variable: 'ROX_CENTRAL_ADDRESS')]){
-                    sh '''
-                      roxctl --insecure-skip-tls-verify -e ${ROX_CENTRAL_ADDRESS} image check --image docker-cicd.smartplay-np.lcsd.hksarg:8443/cicd/demo:latest
-                    '''
+                    sh """
+                      roxctl --insecure-skip-tls-verify -e ${ROX_CENTRAL_ADDRESS} image check --image ${DOCKER_HOST_ONPRIM}/${DOCKER_GROUP_NAME}/${PACKAGE_BUILD_OUTPUT}
+                    """
                 }
             }
         }
@@ -90,14 +186,14 @@ pipeline {
                     
                     openshift.withCluster('smartplay-np'){
                         openshift.withProject('cicddemo-dev'){
-                            def result1 = openshift.tag('--source=docker','docker-cicd.smartplay-np.lcsd.hksarg:8443/cicd/demo:latest', 'cicd-common/springboot-dmeo:latest')
+                            def result1 = openshift.tag("--source=docker","${DOCKER_HOST_ONPRIM}/${DOCKER_GROUP_NAME}/${params.PACKAGE_BUILD_OUTPUT}", "cicd-common/${params.PACKAGE_ARTIFACT_NAME}:latest")
                             echo "${result1.out}"
-                            def result2 = openshift.tag('cicd-common/springboot-dmeo:latest','cicd-common/springboot-dmeo:dev')
+                            def result2 = openshift.tag("cicd-common/${params.PACKAGE_ARTIFACT_NAME}:latest","cicd-common/${params.PACKAGE_ARTIFACT_NAME}:dev")
                             echo "${result2.out}"
                             
                         }
                         openshift.withProject('cicd-common'){
-                            def istag = openshift.selector('istag/springboot-dmeo:dev').object()
+                            def istag = openshift.selector("istag/${params.PACKAGE_ARTIFACT_NAME}:dev").object()
                             imagereference  =istag.image.dockerImageReference
                             echo "IMAGEREF ${imagereference}"
                         }
@@ -106,12 +202,12 @@ pipeline {
                                 sh """
                                   rm -rf springboot-helloworld
                                   export GIT_SSH_COMMAND="ssh -i ${keyfile} -o IdentitiesOnly=yes -o StrictHostKeyChecking=no" 
-                                  git clone 'ssh://git@gitea-ops-cicd.smartplay-np.lcsd.hksarg:2222/demo/springboot-helloworld.git'
+                                  git clone 'ssh://git@${GITTEA_OPS_HOST}:${GITTEA_OPS_PORT}/${params.GITEA_OPS_ORGANIZATION}/${params.GITEA_OPS_PROJECT}'
                                   cd springboot-helloworld/environments/dev
                                   git config user.email "cicd@smartplay-np.lcsd.hksarg"
                                   git config user.name "cicd"
                                   git status
-                                  kustomize edit set image image-registry.openshift-image-registry.svc:5000/cicd-common/demo:latest=${imagereference}
+                                  kustomize edit set image ${params.KUSTOMIZE_IMAGE_NAME}=${imagereference}
                                   git add ./kustomization.yaml
                                   git commit -m "CI Image Update"
                                   git tag -a v0.0.1 -m "CI Image Update" --force
@@ -126,7 +222,7 @@ pipeline {
                             echo "${resultLogin.out}"
                             
                             try {
-                                def resultSyn = openshift.raw('rsh argocd-application-controller-0  argocd --config /tmp/config app sync "cicd-tools/springboot-demo-dev"')
+                                def resultSyn = openshift.raw("rsh argocd-application-controller-0  argocd --config /tmp/config app sync \"cicd-tools/${params.KUSTOMIZE_PROJECT_NAME}\"")
                                 echo "${resultSyn.out}"
                             } catch (Exception e){
                                 echo "Exception "+e.toString() +" expectred"
@@ -158,7 +254,7 @@ pipeline {
                         podman rmi smartplay-nonp-registry-vpc.cn-hongkong.cr.aliyuncs.com/cicd-tools/springboot-helloworld:${currentBuild.number}
                         podman rmi ${imagereference}
                         """
-                    }
+                                 }
                     openshift.withCluster('alicloud-nonprod'){
                         openshift.withProject('cicd-tools'){
                             withCredentials([sshUserPrivateKey(credentialsId: 'GITEA-APPS-DEPLOY', keyFileVariable: 'keyfile')]) {
@@ -167,7 +263,7 @@ pipeline {
                                     mkdir -p /tmp/git-ops
                                     cd /tmp/git-ops
                                     export GIT_SSH_COMMAND="ssh -i /tmp/keyfile.txt -o IdentitiesOnly=yes -o StrictHostKeyChecking=no" 
-                                    git clone 'ssh://git@gitea-gitea:2222/demo/springboot-helloworld.git'
+                                    git clone 'ssh://git@${GITTEA_OPS_ALICLOUD_HOST}:${GITTEA_OPS_ALICLOUD_PORT}/${params.GITEA_OPS_ALICLOUD_ORGANIZATION}/${params.GITEA_OPS_ALICLOUD_PROJECT}'
                                     cd springboot-helloworld/environments/dev
                                     git config user.email "cicd@smartplay-np.lcsd.hksarg"
                                     git config user.name "cicd"
@@ -184,7 +280,9 @@ pipeline {
                                 def pod = openshift.selector('pod',['app.kubernetes.io/name':'argocd-server']).object()
                                 echo pod.metadata.name
                                 def resultCp = openshift.raw("cp ${keyfile} ${pod.metadata.name}:/tmp/keyfile.txt")
+                                echo "${resultCp.out}"
                                 def resultCp2 = openshift.raw("cp gitcommand.txt ${pod.metadata.name}:/tmp/gitcommand.txt")
+                                echo "${resultCp2.out}"
                                 def resultExec = openshift.raw("exec ${pod.metadata.name} -- bash /tmp/gitcommand.txt")
                                 echo "${resultExec.out}"
                                 def resultLogin = openshift.raw("rsh ${pod.metadata.name}  argocd --config /tmp/config  login  --insecure --core")
