@@ -1,0 +1,159 @@
+def sonarHome =""
+def imagereference=""
+pipeline {
+    agent {
+        node {
+            label 'maven'
+        }
+    }
+    stages {
+        stage('checkout') {
+            steps {
+                dir('jmeter') {
+                    checkout([$class: 'GitSCM', branches: [[name: '*/main']], userRemoteConfigs:[[credentialsId: 'GITEA-APPS-DEPLOY', url:'ssh://git@gitea-app-cicd.smartplay-np.lcsd.hksarg:2222/demo/springboot-helloworld-perftest.git']]  ])
+                }
+                dir('selenium') {
+                    checkout([$class: 'GitSCM', branches: [[name: '*/main']], userRemoteConfigs:[[credentialsId: 'GITEA-APPS-DEPLOY', url:'ssh://git@gitea-app-cicd.smartplay-np.lcsd.hksarg:2222/demo/springboot-helloworld-selenium.git']]  ])
+                }
+            }
+        }
+              stage('deploy in openshift') {
+            steps {
+                script {
+                    
+                    openshift.withCluster('smartplay-np'){
+                        openshift.withProject('cicd-common'){
+                            def result2 = openshift.tag('cicd-common/springboot-dmeo:dev','cicd-common/springboot-dmeo:sit')
+                            echo "${result2.out}"
+                            def istag = openshift.selector('istag/springboot-dmeo:sit').object()
+                            imagereference  =istag.image.dockerImageReference
+                            echo "IMAGEREF ${imagereference}"
+                        }
+                        dir('git-ops') {
+                            withCredentials([sshUserPrivateKey(credentialsId: 'GITEA-APPS-DEPLOY', keyFileVariable: 'keyfile')]) {
+                                try {
+                                sh """
+                                  rm -rf springboot-helloworld
+                                  GIT_SSH_COMMAND="ssh -i ${keyfile} -o IdentitiesOnly=yes -o StrictHostKeyChecking=no" git clone 'ssh://git@gitea-ops-cicd.smartplay-np.lcsd.hksarg:2222/demo/springboot-helloworld.git'
+                                  cd springboot-helloworld/environments/sit
+                                  git config user.email "cicd@smartplay-np.lcsd.hksarg"
+                                  git config user.name "cicd"
+                                  git status
+                                  kustomize edit set image image-registry.openshift-image-registry.svc:5000/cicd-common/demo:latest=${imagereference}
+                                  git add ./kustomization.yaml
+                                  git commit -m "CI Image Update"
+                                  GIT_SSH_COMMAND="ssh -i ${keyfile} -o IdentitiesOnly=yes -o StrictHostKeyChecking=no" git push
+                                  
+                                """
+                                } catch (Exception e) {
+                                    echo "no image change"
+                                }
+                            }
+                            
+                        }
+                        openshift.withProject('cicd-tools'){
+                            def resultLogin = openshift.raw('rsh argocd-application-controller-0  argocd --config /tmp/confi  login  --insecure --core')
+                            echo "${resultLogin.out}"
+                            
+                            try {
+                                def resultSyn = openshift.raw('rsh argocd-application-controller-0  argocd --config /tmp/config app sync "cicd-tools/springboot-demo-sit"')
+                                echo "${resultSyn.out}"
+                            } catch (Exception e){
+                                echo "Exception "+e.toString() +" expectred"
+                            }
+                            sh 'sleep 3'
+                            def resultWait = openshift.raw('rsh argocd-application-controller-0  argocd --config /tmp/config app wait "cicd-tools/springboot-demo-sit"')
+                            echo "${resultWait.out}"
+                        }
+                    }
+                }
+            }
+        }
+
+
+        stage('deploy in alicloud') {
+            agent {
+                node {
+                    label 'alicloud-nonprod-jumphost'
+                }
+            }
+            steps {
+                script {
+                    withCredentials([file(credentialsId: 'DOCKER-CICD-AUTH', variable: 'DOCKERCICDAUTH'), 
+                                 file(credentialsId: 'ALICLOUD-NP-REGISTRY-AUTH', variable: 'ALICLOUDNPREGISTRYAUTH')]) {
+                        sh """
+                        podman pull --authfile ${DOCKERCICDAUTH} --tls-verify=false  ${imagereference}
+                        podman tag ${imagereference} smartplay-nonp-registry-vpc.cn-hongkong.cr.aliyuncs.com/cicd-tools/springboot-helloworld:sit-${currentBuild.number}
+                        podman push --authfile ${ALICLOUDNPREGISTRYAUTH} --tls-verify=false  smartplay-nonp-registry-vpc.cn-hongkong.cr.aliyuncs.com/cicd-tools/springboot-helloworld:sit-${currentBuild.number}
+                        podman rmi smartplay-nonp-registry-vpc.cn-hongkong.cr.aliyuncs.com/cicd-tools/springboot-helloworld:sit-${currentBuild.number}
+                        podman rmi ${imagereference}
+                        """
+                    }
+                    openshift.withCluster('alicloud-nonprod'){
+                        openshift.withProject('cicd-tools'){
+                            withCredentials([sshUserPrivateKey(credentialsId: 'GITEA-APPS-DEPLOY', keyFileVariable: 'keyfile')]) {
+                                writeFile file: "gitcommand.txt", text: """
+                                    rm -rf /tmp/git-ops
+                                    mkdir -p /tmp/git-ops
+                                    cd /tmp/git-ops
+                                    export GIT_SSH_COMMAND="ssh -i /tmp/keyfile.txt -o IdentitiesOnly=yes -o StrictHostKeyChecking=no" 
+                                    git clone 'ssh://git@gitea-gitea:2222/demo/springboot-helloworld.git'
+                                    cd springboot-helloworld/environments/sit
+                                    git config user.email "cicd@smartplay-np.lcsd.hksarg"
+                                    git config user.name "cicd"
+                                    git status
+                                    kustomize edit set image image-registry.openshift-image-registry.svc:5000/cicd-common/demo:latest=smartplay-nonp-registry-vpc.cn-hongkong.cr.aliyuncs.com/cicd-tools/springboot-helloworld:sit-${currentBuild.number}
+                                    git add ./kustomization.yaml
+                                    git commit -m "CI Image Update"
+                                    git tag -a v0.0.1 -m "CI Image Update" --force
+                                    git push origin main
+                                    git push --tags --force
+                                    rm -f /tmp/keyfile.txt
+                                    rm -f /tmp/gitcommand.txt
+                                """
+                                def pod = openshift.selector('pod',['app.kubernetes.io/name':'argocd-server']).object()
+                                echo pod.metadata.name
+                                def resultCp = openshift.raw("cp ${keyfile} ${pod.metadata.name}:/tmp/keyfile.txt")
+                                def resultCp2 = openshift.raw("cp gitcommand.txt ${pod.metadata.name}:/tmp/gitcommand.txt")
+                                def resultExec = openshift.raw("exec ${pod.metadata.name} -- bash /tmp/gitcommand.txt")
+                                echo "${resultExec.out}"
+                                def resultLogin = openshift.raw("rsh ${pod.metadata.name}  argocd --config /tmp/config  login  --insecure --core")
+                                echo "${resultLogin.out}"
+                                
+                                try {
+                                    def resultSyn = openshift.raw("rsh ${pod.metadata.name}  argocd --config /tmp/config app sync \"cicd-tools/springboot-demo-sit\"")
+                                    echo "${resultSyn.out}"
+                                } catch (Exception e){
+                                    echo "Exception "+e.toString() +" expectred"
+                                }
+                                sh 'sleep 3'
+                                def resultWait = openshift.raw("rsh ${pod.metadata.name}   argocd --config /tmp/config app wait \"cicd-tools/springboot-demo-sit\"")
+                                echo "${resultWait.out}"
+                            }
+                        }  
+                    }
+                }
+            }
+        }
+
+        stage('run selenium') {
+            steps {
+                dir('selenium') {
+                    //sh 'mvn spring-boot:run'
+                    sh 'mvn package'
+                    sh 'java -jar ./target/*.jar'
+                }
+            }
+        }
+        stage('run jmeter') {
+            steps {
+                dir('jmeter') {
+                    sh """
+                    jmeter -j jmeter.save.saveservice.output_format=xml -n -t main.jmx "-Jhost=springboot-demo-cicddemo-sit.apps.nonp-cluster.smartplay-np.lcsd.hksarg" -Jport=80 -Jpath=/greeting -Jthreads=1 -Jprotocol=http -Jrampup=1 -l result.jtl
+                    """
+                    perfReport '*.jtl'
+                 }
+            }
+        }
+    }
+}
