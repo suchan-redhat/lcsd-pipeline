@@ -137,7 +137,7 @@ pipeline {
                         string(credentialsId: 'CICD-CA-JKS-KEY', variable: 'CICDCAJKSKEY' )
                     ]) {
                         sh "export SONAR_SCANNER_OPTS=\"-Djava.net.debug=all -Djavax.net.ssl.trustStore=${sonarHome}/cicd-ca.jks -Djavax.net.ssl.keyStore=${sonarHome}/cicd-ca.jks -Djavax.net.ssl.keyStorePassword=changeit -Djavax.net.ssl.trustStorePassword=changeit -Dmaven.wagon.http.ssl.insecure=true\""
-                        sh "${sonarHome}/bin/sonar-scanner -Dsonar.projectKey=${env.JOB_NAME} -Dsonar.java.binaries=target"
+                        sh "${sonarHome}/bin/sonar-scanner -Dsonar.projectKey=${params.PACKAGE_ARTIFACT_GROUP}.${PACKAGE_ARTIFACT_NAME} -Dsonar.java.binaries=target"
                     }
                 }
             }
