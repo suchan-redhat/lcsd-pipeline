@@ -223,13 +223,13 @@ pipeline {
                             echo "${resultLogin.out}"
                             
                             try {
-                                def resultSyn = openshift.raw("rsh argocd-application-controller-0  argocd --config /tmp/config app sync \"cicd-tools/${params.KUSTOMIZE_PROJECT_NAME}\"")
+                                def resultSyn = openshift.raw("rsh argocd-application-controller-0  argocd --config /tmp/config app sync \"${params.KUSTOMIZE_PROJECT_NAME}\"")
                                 echo "${resultSyn.out}"
                             } catch (Exception e){
                                 echo "Exception "+e.toString() +" expectred"
                             }
                             sh 'sleep 3'
-                            def resultWait = openshift.raw("rsh argocd-application-controller-0  argocd --config /tmp/config app wait \"cicd-tools/${params.KUSTOMIZE_PROJECT_NAME}\"")
+                            def resultWait = openshift.raw("rsh argocd-application-controller-0  argocd --config /tmp/config app wait \"${params.KUSTOMIZE_PROJECT_NAME}\"")
                             echo "${resultWait.out}"
                         }
                     }
@@ -290,13 +290,13 @@ pipeline {
                                 echo "${resultLogin.out}"
                                 
                                 try {
-                                    def resultSyn = openshift.raw("rsh ${pod.metadata.name}  argocd --config /tmp/config app sync \"cicd-tools/${params.KUSTOMIZE_PROJECT_NAME}\"")
+                                    def resultSyn = openshift.raw("rsh ${pod.metadata.name}  argocd --config /tmp/config app sync \"${params.KUSTOMIZE_PROJECT_NAME}\"")
                                     echo "${resultSyn.out}"
                                 } catch (Exception e){
                                     echo "Exception "+e.toString() +" expectred"
                                 }
                                 sh 'sleep 3'
-                                def resultWait = openshift.raw("rsh ${pod.metadata.name}   argocd --config /tmp/config app wait \"cicd-tools/${params.KUSTOMIZE_PROJECT_NAME}\"")
+                                def resultWait = openshift.raw("rsh ${pod.metadata.name}   argocd --config /tmp/config app wait \"${params.KUSTOMIZE_PROJECT_NAME}\"")
                                 echo "${resultWait.out}"
                             }
                         }  
