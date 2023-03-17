@@ -4,7 +4,9 @@ def GITTEA_HOST = "gitea-app-cicd.smartplay-np.lcsd.hksarg"
 def GITTEA_OPS_HOST = "gitea-ops-cicd.smartplay-np.lcsd.hksarg"
 def GITTEA_OPS_ALICLOUD_HOST = "gitea-gitea"
 def DOCKER_HOST_ONPRIM = "docker-cicd.smartplay-np.lcsd.hksarg:8443"
+def DOCKER_HOST_ALICLOUD = "smartplay-nonp-registry-vpc.cn-hongkong.cr.aliyuncs.com"
 def DOCKER_GROUP_NAME = "cicd"
+def DOCKER_GROUP_ALICLOUD_NAME = "cicd-tools"
 def GITTEA_PORT = "2222"
 def GITTEA_OPS_PORT = "2222"
 def GITTEA_OPS_ALICLOUD_PORT = "2222"
@@ -227,7 +229,7 @@ pipeline {
                                 echo "Exception "+e.toString() +" expectred"
                             }
                             sh 'sleep 3'
-                            def resultWait = openshift.raw('rsh argocd-application-controller-0  argocd --config /tmp/config app wait "cicd-tools/springboot-demo-dev"')
+                            def resultWait = openshift.raw("rsh argocd-application-controller-0  argocd --config /tmp/config app wait \"cicd-tools/${params.KUSTOMIZE_PROJECT_NAME}\"")
                             echo "${resultWait.out}"
                         }
                     }
@@ -248,9 +250,9 @@ pipeline {
                                  file(credentialsId: 'ALICLOUD-NP-REGISTRY-AUTH', variable: 'ALICLOUDNPREGISTRYAUTH')]) {
                         sh """
                         podman pull --authfile ${DOCKERCICDAUTH} --tls-verify=false  ${imagereference}
-                        podman tag ${imagereference} smartplay-nonp-registry-vpc.cn-hongkong.cr.aliyuncs.com/cicd-tools/springboot-helloworld:${currentBuild.number}
-                        podman push --authfile ${ALICLOUDNPREGISTRYAUTH} --tls-verify=false  smartplay-nonp-registry-vpc.cn-hongkong.cr.aliyuncs.com/cicd-tools/springboot-helloworld:${currentBuild.number}
-                        podman rmi smartplay-nonp-registry-vpc.cn-hongkong.cr.aliyuncs.com/cicd-tools/springboot-helloworld:${currentBuild.number}
+                        podman tag ${imagereference} ${DOCKER_HOST_ALICLOUD}/${DOCKER_GROUP_ALICLOUD_NAME}/${params.PACKAGE_ARTIFACT_NAME}:${currentBuild.number}
+                        podman push --authfile ${ALICLOUDNPREGISTRYAUTH} --tls-verify=false ${DOCKER_HOST_ALICLOUD}/${DOCKER_GROUP_ALICLOUD_NAME}/${params.PACKAGE_ARTIFACT_NAME}:${currentBuild.number}
+                        podman rmi ${DOCKER_HOST_ALICLOUD}/${DOCKER_GROUP_ALICLOUD_NAME}/${params.PACKAGE_ARTIFACT_NAME}:${currentBuild.number}
                         podman rmi ${imagereference}
                         """
                                  }
@@ -267,7 +269,7 @@ pipeline {
                                     git config user.email "cicd@smartplay-np.lcsd.hksarg"
                                     git config user.name "cicd"
                                     git status
-                                    kustomize edit set image image-registry.openshift-image-registry.svc:5000/cicd-common/demo:latest=smartplay-nonp-registry-vpc.cn-hongkong.cr.aliyuncs.com/cicd-tools/springboot-helloworld:${currentBuild.number}
+                                    kustomize edit set image ${params.KUSTOMIZE_IMAGE_NAME}=${DOCKER_HOST_ALICLOUD}/${DOCKER_GROUP_ALICLOUD_NAME}/${params.PACKAGE_ARTIFACT_NAME}:${currentBuild.number}
                                     git add ./kustomization.yaml
                                     git commit -m "CI Image Update"
                                     git tag -a v0.0.1 -m "CI Image Update" --force
@@ -288,13 +290,13 @@ pipeline {
                                 echo "${resultLogin.out}"
                                 
                                 try {
-                                    def resultSyn = openshift.raw("rsh ${pod.metadata.name}  argocd --config /tmp/config app sync \"cicd-tools/springboot-demo-dev\"")
+                                    def resultSyn = openshift.raw("rsh ${pod.metadata.name}  argocd --config /tmp/config app sync \"cicd-tools/${params.KUSTOMIZE_PROJECT_NAME}\"")
                                     echo "${resultSyn.out}"
                                 } catch (Exception e){
                                     echo "Exception "+e.toString() +" expectred"
                                 }
                                 sh 'sleep 3'
-                                def resultWait = openshift.raw("rsh ${pod.metadata.name}   argocd --config /tmp/config app wait \"cicd-tools/springboot-demo-dev\"")
+                                def resultWait = openshift.raw("rsh ${pod.metadata.name}   argocd --config /tmp/config app wait \"cicd-tools/${params.KUSTOMIZE_PROJECT_NAME}\"")
                                 echo "${resultWait.out}"
                             }
                         }  
