@@ -70,7 +70,7 @@ pipeline {
                                 trim: true
                             ),
                             string(
-                                defaultValue: 'image-registry.openshift-image-registry.svc:5000/cicd-common/demo:latest',
+                                defaultValue: 'cicd-tools/springboot-demo-dev',
                                 name: 'KUSTOMIZE_PROJECT_NAME',
                                 trim: true
                             ),
