@@ -18,69 +18,42 @@ pipeline {
             label 'maven'
         }
     }
-    parameters {
-        string(
-            defaultValue: 'com.redhat.demo',
-            name: 'PACKAGE_ARTIFACT_GROUP',
-            trim: true
-        )
-        string(
-            defaultValue: 'springboot-helloworld',
-            name: 'PACKAGE_ARTIFACT_NAME',
-            trim: true
-        )
-        string(
-            defaultValue: 'demo',
-            name: 'PACKAGE_BUILD_NAME',
-            trim: true
-        )
-        string(
-            defaultValue: 'demo:latest',
-            name: 'PACKAGE_BUILD_OUTPUT',
-            trim: true
-        )
-        string(
-            defaultValue: 'demo',
-            name: 'GITEA_OPS_ORGANIZATION',
-            trim: true
-        )
-        string(
-            defaultValue: 'image-registry.openshift-image-registry.svc:5000/cicd-common/demo:latest',
-            name: 'KUSTOMIZE_IMAGE_NAME',
-            trim: true
-        )
-        string(
-            defaultValue: 'cicd-tools/springboot-demo-dev',
-            name: 'KUSTOMIZE_PROJECT_NAME',
-            trim: true
-        )
-        string(
-            defaultValue: 'springboot-helloworld.git',
-            name: 'GITEA_OPS_PROJECT',
-            trim: true
-        )
-        string(
-            defaultValue: 'demo',
-            name: 'GITEA_OPS_ALICLOUD_ORGANIZATION',
-            trim: true
-        )
-        string(
-            defaultValue: 'springboot-helloworld.git',
-            name: 'GITEA_OPS_ALICLOUD_PROJECT',
-            trim: true
-        )
-        string(
-            defaultValue: 'demo',
-            name: 'GITEA_APP_ORGANIZATION',
-            trim: true
-        )
-        string(
-            defaultValue: 'springboot-helloworld.git',
-            name: 'GITEA_APP_PROJECT',
-            trim: true
-        )
-    }
     stages {
+        stage('Check Parameters') {
+            steps {
+                script {
+                    if (!params.containsKey("GITEA_ORGANIZATION") 
+                        || !params.containsKey("GITEA_PROJECT")
+                        || !params.containsKey("BUILD_AND_DEPLOY_TO_CONTAINER")
+                        ) {
+                            //   GITEA_ORGANIZATION -> e.g. demo
+                            //   GITEA_PROJECT -> e.g. springboot-helloworld
+                            //   BUILD_AND_DEPLOY_TO_CONTAINER -> true
+                            properties([
+                                parameters([
+                                    string(
+                                        name: 'GITEA_ORGANIZATION',
+                                        trim: true
+                                    ),
+                                    string(
+                                        name: 'GITEA_PROJECT',
+                                        trim: true
+                                    ),
+                                    booleanParam(
+                                        name: 'BUILD_AND_DEPLOY_TO_CONTAINER',
+                                        defaultValue: true
+                                    )
+                                ])
+                            ])
+                        }
+                    if (params.GITEA_ORGANIZATION.isEmpty() 
+                    || params.GITEA_PROJECT.isEmpty()) {
+                        error("Missing Mandatory Paramters")
+                    }
+                    
+                }
+            }
+        }
         stage('checkout') {
             steps {
                 checkout(
