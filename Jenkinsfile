@@ -17,93 +17,69 @@ pipeline {
             label 'maven'
         }
     }
+    parameters {
+        string(
+            defaultValue: 'com.redhat.demo',
+            name: 'PACKAGE_ARTIFACT_GROUP',
+            trim: true
+        )
+        string(
+            defaultValue: 'springboot-helloworld',
+            name: 'PACKAGE_ARTIFACT_NAME',
+            trim: true
+        )
+        string(
+            defaultValue: 'demo',
+            name: 'PACKAGE_BUILD_NAME',
+            trim: true
+        )
+        string(
+            defaultValue: 'demo:latest',
+            name: 'PACKAGE_BUILD_OUTPUT',
+            trim: true
+        )
+        string(
+            defaultValue: 'demo',
+            name: 'GITEA_OPS_ORGANIZATION',
+            trim: true
+        )
+        string(
+            defaultValue: 'image-registry.openshift-image-registry.svc:5000/cicd-common/demo:latest',
+            name: 'KUSTOMIZE_IMAGE_NAME',
+            trim: true
+        )
+        string(
+            defaultValue: 'cicd-tools/springboot-demo-dev',
+            name: 'KUSTOMIZE_PROJECT_NAME',
+            trim: true
+        )
+        string(
+            defaultValue: 'springboot-helloworld.git',
+            name: 'GITEA_OPS_PROJECT',
+            trim: true
+        )
+        string(
+            defaultValue: 'demo',
+            name: 'GITEA_OPS_ALICLOUD_ORGANIZATION',
+            trim: true
+        )
+        string(
+            defaultValue: 'springboot-helloworld.git',
+            name: 'GITEA_OPS_ALICLOUD_PROJECT',
+            trim: true
+        )
+        string(
+            defaultValue: 'demo',
+            name: 'GITEA_APP_ORGANIZATION',
+            trim: true
+        )
+        string(
+            defaultValue: 'springboot-helloworld.git',
+            name: 'GITEA_APP_PROJECT',
+            trim: true
+        )
+    }
     stages {
-        stage('Setup parameters') {
-            steps {
-                script {
-                    properties([
-                        parameters([
-                            // choice(
-                            //     choices: ['ONE', 'TWO'], 
-                            //     name: 'PARAMETER_01'
-                            // ),
-                            // booleanParam(
-                            //     defaultValue: true, 
-                            //     description: '', 
-                            //     name: 'BOOLEAN'
-                            // ),
-                            // text(
-                            //     defaultValue: '''
-                            //     this is a multi-line 
-                            //     string parameter example
-                            //     ''', 
-                            //      name: 'MULTI-LINE-STRING'
-                            // ),
-                            string(
-                                defaultValue: 'com.redhat.demo',
-                                name: 'PACKAGE_ARTIFACT_GROUP',
-                                trim: true
-                            ),
-                            string(
-                                defaultValue: 'springboot-helloworld',
-                                name: 'PACKAGE_ARTIFACT_NAME',
-                                trim: true
-                            ),
-                            string(
-                                defaultValue: 'demo',
-                                name: 'PACKAGE_BUILD_NAME',
-                                trim: true
-                            ),
-                            string(
-                                defaultValue: 'demo:latest',
-                                name: 'PACKAGE_BUILD_OUTPUT',
-                                trim: true
-                            ),
-                            string(
-                                defaultValue: 'demo',
-                                name: 'GITEA_OPS_ORGANIZATION',
-                                trim: true
-                            ),
-                            string(
-                                defaultValue: 'image-registry.openshift-image-registry.svc:5000/cicd-common/demo:latest',
-                                name: 'KUSTOMIZE_IMAGE_NAME',
-                                trim: true
-                            ),
-                            string(
-                                defaultValue: 'cicd-tools/springboot-demo-dev',
-                                name: 'KUSTOMIZE_PROJECT_NAME',
-                                trim: true
-                            ),
-                            string(
-                                defaultValue: 'springboot-helloworld.git',
-                                name: 'GITEA_OPS_PROJECT',
-                                trim: true
-                            ),
-                            string(
-                                defaultValue: 'demo',
-                                name: 'GITEA_OPS_ALICLOUD_ORGANIZATION',
-                                trim: true
-                            ),
-                            string(
-                                defaultValue: 'springboot-helloworld.git',
-                                name: 'GITEA_OPS_ALICLOUD_PROJECT',
-                                trim: true
-                            ),
-                            string(
-                                defaultValue: 'demo',
-                                name: 'GITEA_APP_ORGANIZATION',
-                                trim: true
-                            ),
-                            string(
-                                defaultValue: 'springboot-helloworld.git',
-                                name: 'GITEA_APP_PROJECT',
-                                trim: true
-                            )
-                        ])
-                    ])
-                }
-            }
-        }
         stage('checkout') {
             steps {
                 checkout(
