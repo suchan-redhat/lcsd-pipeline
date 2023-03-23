@@ -162,7 +162,9 @@ pipeline {
                         """
                         openshift.withCluster('smartplay-np'){
                             openshift.withProject('cicddemo-dev'){
-                                def bc = openshift.selector("bc/${pom.artifactId}")
+                                def bc = openshift.selector("bc/${pom.artifactId}").object()
+                                echo "bc"
+                                echo "${bc}"
                                 if (bc==null || !bc) {
                                     def bcResult = openshift.raw("new-build  --name ${pom.artifactId} --binary=true --to-docker=true --to=${DOCKER_HOST_ONPRIM}/${DOCKER_GROUP_NAME}/${pom.artifactId}:latest --strategy=source --iamge-stream=cicd-common/redhat-ubi8-openjdk-11:1.14")
                                     echo "${bcResult.out}"
