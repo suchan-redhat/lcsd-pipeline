@@ -95,15 +95,45 @@ pipeline {
                         file(credentialsId: 'CICD-CA-JKS', variable: 'CICDCAJKS' ),
                         string(credentialsId: 'CICD-CA-JKS-KEY', variable: 'CICDCAJKSKEY' )
                     ]) {
-                        sh "export SONAR_SCANNER_OPTS=\"-Djava.net.debug=all -Djavax.net.ssl.trustStore=${sonarHome}/cicd-ca.jks -Djavax.net.ssl.keyStore=${sonarHome}/cicd-ca.jks -Djavax.net.ssl.keyStorePassword=changeit -Djavax.net.ssl.trustStorePassword=changeit -Dmaven.wagon.http.ssl.insecure=true\""
-                        sh "${sonarHome}/bin/sonar-scanner -Dsonar.projectKey=${pom.groupId}.${pom.artifactId} -Dsonar.java.binaries=target"
+                        if (pom.packaging == pom ) {
+                            echo "SKIP sonarqube scanning for pom"
+                        } else {
+                            sh "export SONAR_SCANNER_OPTS=\"-Djava.net.debug=all -Djavax.net.ssl.trustStore=${sonarHome}/cicd-ca.jks -Djavax.net.ssl.keyStore=${sonarHome}/cicd-ca.jks -Djavax.net.ssl.keyStorePassword=changeit -Djavax.net.ssl.trustStorePassword=changeit -Dmaven.wagon.http.ssl.insecure=true\""
+                            sh "${sonarHome}/bin/sonar-scanner -Dsonar.projectKey=${pom.groupId}.${pom.artifactId} -Dsonar.java.binaries=target"
+                        }
+                        for (module in pom.module) {
+                            dir(module) {
+                                def modulePom = readMavenPom file: 'pom.xml'
+                                if (modulePom.packaging == pom ) {
+                                    echo "SKIP sonarqube scanning for pom"
+                                } else {
+                                    sh "export SONAR_SCANNER_OPTS=\"-Djava.net.debug=all -Djavax.net.ssl.trustStore=${sonarHome}/cicd-ca.jks -Djavax.net.ssl.keyStore=${sonarHome}/cicd-ca.jks -Djavax.net.ssl.keyStorePassword=changeit -Djavax.net.ssl.trustStorePassword=changeit -Dmaven.wagon.http.ssl.insecure=true\""
+                                    sh "${sonarHome}/bin/sonar-scanner -Dsonar.projectKey=${pom.groupId}.${modulePom.artifactId} -Dsonar.java.binaries=target"
+                                }
+                            }
+                        }
                     }
                 }
             }
         }
         stage('deploy to nexus') {
             steps {
-                sh 'mvn deploy -DskipTests -Pdeploy-to-nexus'
+                if (pom.packaging == pom ) {
+                            echo "SKIP sonarqube scanning for pom"
+                } else {
+                    sh 'mvn deploy -DskipTests -Pdeploy-to-nexus'
+                }
+                for (module in pom.module) {
+                    dir(module) {
+                        def modulePom = readMavenPom file: 'pom.xml'
+                        if (modulePom.packaging == pom ) {
+                            echo "SKIP sonarqube scanning for pom"
+                        } else {
+                            sh 'mvn deploy -DskipTests -Pdeploy-to-nexus'
+                        }
+                    }
+                }
+
             }
         }
 
