@@ -162,9 +162,14 @@ pipeline {
                         """
                         openshift.withCluster('smartplay-np'){
                             openshift.withProject('cicddemo-dev'){
-                                def result = openshift.raw("start-build --follow ${pom.artifactId} --from-file=./${pom.artifactId}-${pom.version}.jar")
-                                echo "${result.out}"
-                                sh "exit ${result.status}"
+                                def bc = openshift.selector("bc/${pom.artifactId}").object()
+                                if (bc) {
+                                    def result = openshift.raw("start-build --follow ${pom.artifactId} --from-file=./${pom.artifactId}-${pom.version}.jar")
+                                    echo "${result.out}"
+                                    sh "exit ${result.status}"
+                                } else {
+                                    error("not build config found")
+                                }
                             }
                         }
                     }
