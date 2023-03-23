@@ -95,7 +95,7 @@ pipeline {
                             file(credentialsId: 'CICD-CA-JKS', variable: 'CICDCAJKS' ),
                             string(credentialsId: 'CICD-CA-JKS-KEY', variable: 'CICDCAJKSKEY' )
                         ]) {
-                            if (pom.packaging == pom ) {
+                            if (pom.packaging == "pom" ) {
                                 echo "SKIP sonarqube scanning for pom"
                             } else {
                                 sh "export SONAR_SCANNER_OPTS=\"-Djava.net.debug=all -Djavax.net.ssl.trustStore=${sonarHome}/cicd-ca.jks -Djavax.net.ssl.keyStore=${sonarHome}/cicd-ca.jks -Djavax.net.ssl.keyStorePassword=changeit -Djavax.net.ssl.trustStorePassword=changeit -Dmaven.wagon.http.ssl.insecure=true\""
@@ -120,7 +120,7 @@ pipeline {
         stage('deploy to nexus') {
             steps {
                 script {
-                    if (pom.packaging == pom ) {
+                    if (pom.packaging == "pom" ) {
                         echo "SKIP sonarqube scanning for pom"
                     } else {
                         sh 'mvn deploy -DskipTests -Pdeploy-to-nexus'
