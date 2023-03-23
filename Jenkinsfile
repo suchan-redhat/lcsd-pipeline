@@ -101,7 +101,8 @@ pipeline {
                                 sh "export SONAR_SCANNER_OPTS=\"-Djava.net.debug=all -Djavax.net.ssl.trustStore=${sonarHome}/cicd-ca.jks -Djavax.net.ssl.keyStore=${sonarHome}/cicd-ca.jks -Djavax.net.ssl.keyStorePassword=changeit -Djavax.net.ssl.trustStorePassword=changeit -Dmaven.wagon.http.ssl.insecure=true\""
                                 sh "${sonarHome}/bin/sonar-scanner -Dsonar.projectKey=${pom.groupId}.${pom.artifactId} -Dsonar.java.binaries=target"
                             }
-                            for (module in pom.module) {
+                            for (module in pom.modules) {
+                                echo "module: ${module}"
                                 dir(module) {
                                     def modulePom = readMavenPom file: 'pom.xml'
                                     if (modulePom.packaging == pom ) {
@@ -125,7 +126,8 @@ pipeline {
                     } else {
                         sh 'mvn deploy -DskipTests -Pdeploy-to-nexus'
                     }
-                    for (module in pom.module) {
+                    for (module in pom.modules) {
+                        echo "module: ${module}"
                         dir(module) {
                             def modulePom = readMavenPom file: 'pom.xml'
                             if (modulePom.packaging == pom ) {
