@@ -34,14 +34,17 @@ pipeline {
                                 parameters([
                                     string(
                                         name: 'GITEA_ORGANIZATION',
+                                        description: 'Organization Name, should be smartplay',
                                         trim: true
                                     ),
                                     string(
                                         name: 'GITEA_PROJECT',
+                                        description: 'Project Name in Gitea, expect in service name',
                                         trim: true
                                     ),
                                     string(
                                         name: 'RELEASE_VERSION',
+                                        description: 'Release in vX.Y.Z semver',
                                         trim: true
                                     ),
                                     booleanParam(
