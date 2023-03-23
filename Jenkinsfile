@@ -121,20 +121,12 @@ pipeline {
         stage('deploy to nexus') {
             steps {
                 script {
-                    if (pom.packaging == "pom" ) {
-                        echo "SKIP sonarqube scanning for pom"
-                    } else {
-                        sh 'mvn deploy -DskipTests -DaltDeploymentRepository=deploy-to-nexus::default::https://nexus-cicd.smartplay-np.lcsd.hksarg:8443/repository/lcsd-maven2'
-                    }
+                    sh 'mvn deploy -DskipTests -DaltDeploymentRepository=deploy-to-nexus::default::https://nexus-cicd.smartplay-np.lcsd.hksarg:8443/repository/lcsd-maven2'                    
                     for (module in pom.modules) {
                         echo "module: ${module}"
                         dir(module) {
                             def modulePom = readMavenPom file: 'pom.xml'
-                            if (modulePom.packaging == pom ) {
-                                echo "SKIP sonarqube scanning for pom"
-                            } else {
-                                sh 'mvn deploy -DskipTests -DaltDeploymentRepository=deploy-to-nexus::default::https://nexus-cicd.smartplay-np.lcsd.hksarg:8443/repository/lcsd-maven2'
-                            }
+                            sh 'mvn deploy -DskipTests -DaltDeploymentRepository=deploy-to-nexus::default::https://nexus-cicd.smartplay-np.lcsd.hksarg:8443/repository/lcsd-maven2'
                         }
                     }
                 }
