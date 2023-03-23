@@ -25,6 +25,7 @@ pipeline {
                     if (!params.containsKey("GITEA_ORGANIZATION") 
                         || !params.containsKey("GITEA_PROJECT")
                         || !params.containsKey("BUILD_AND_DEPLOY_TO_CONTAINER")
+                        || !params.containsKey("RELEASE_VERSION")
                         ) {
                             //   GITEA_ORGANIZATION -> e.g. demo
                             //   GITEA_PROJECT -> e.g. springboot-helloworld
@@ -39,6 +40,10 @@ pipeline {
                                         name: 'GITEA_PROJECT',
                                         trim: true
                                     ),
+                                    string(
+                                        name: 'RELEASE_VERSION',
+                                        trim: true
+                                    ),
                                     booleanParam(
                                         name: 'BUILD_AND_DEPLOY_TO_CONTAINER',
                                         defaultValue: true
@@ -47,7 +52,9 @@ pipeline {
                             ])
                         }
                     if (params.GITEA_ORGANIZATION.isEmpty() 
-                    || params.GITEA_PROJECT.isEmpty()) {
+                    || params.GITEA_PROJECT.isEmpty()
+                    || params.RELEASE_VERSION.isEmpty()
+                    ) {
                         error("Missing Mandatory Paramters")
                     }
                     
@@ -58,7 +65,7 @@ pipeline {
             steps {
                 checkout(
                     [
-                        $class: 'GitSCM', branches: [[name: '*/main']],
+                        $class: 'GitSCM', branches: [[name: "${params.RELEASE_VERSION}"]],
                         userRemoteConfigs:[[credentialsId: 'GITEA-APPS-DEPLOY',
                         url:"ssh://git@${GITTEA_HOST}:${GITTEA_PORT}/${params.GITEA_ORGANIZATION}/${params.GITEA_PROJECT}"]]
                     ])
@@ -183,17 +190,16 @@ pipeline {
             }
             steps {
                 script {
-                    
                     openshift.withCluster('smartplay-np'){
                         openshift.withProject('cicddemo-dev'){
                             def result1 = openshift.tag("--source=docker","${DOCKER_HOST_ONPRIM}/${DOCKER_GROUP_NAME}/${pom.artifactId}", "cicd-common/${pom.artifactId}:latest")
                             echo "${result1.out}"
-                            def result2 = openshift.tag("cicd-common/${pom.artifactId}:latest","cicd-common/${pom.artifactId}:dev")
+                            def result2 = openshift.tag("cicd-common/${pom.artifactId}:latest","cicd-common/${pom.artifactId}:${params.RELEASE_VERSION}")
                             echo "${result2.out}"
                             
                         }
                         openshift.withProject('cicd-common'){
-                            def istag = openshift.selector("istag/${pom.artifactId}:dev").object()
+                            def istag = openshift.selector("istag/${pom.artifactId}:${params.RELEASE_VERSION}").object()
                             imagereference  =istag.image.dockerImageReference
                             echo "IMAGEREF ${imagereference}"
                         }
@@ -210,7 +216,7 @@ pipeline {
                                   kustomize edit set image image-registry.openshift-image-registry.svc:5000/cicd-common/${pom.artifactId}:latest=${imagereference}
                                   git add ./kustomization.yaml
                                   git commit -m "CI Image Update"
-                                  git tag -a v0.0.1 -m "CI Image Update" --force
+                                  git tag -a ${params.RELEASE_VERSION} -m "CI Image Update" --force
                                   git push origin main
                                   git push --tags --force
                                 """
@@ -254,9 +260,9 @@ pipeline {
                                  file(credentialsId: 'ALICLOUD-NP-REGISTRY-AUTH', variable: 'ALICLOUDNPREGISTRYAUTH')]) {
                         sh """
                         podman pull --authfile ${DOCKERCICDAUTH} --tls-verify=false  ${imagereference}
-                        podman tag ${imagereference} ${DOCKER_HOST_ALICLOUD}/${DOCKER_GROUP_ALICLOUD_NAME}/${pom.artifactId}:${currentBuild.number}
-                        podman push --authfile ${ALICLOUDNPREGISTRYAUTH} --tls-verify=false ${DOCKER_HOST_ALICLOUD}/${DOCKER_GROUP_ALICLOUD_NAME}/${pom.artifactId}:${currentBuild.number}
-                        podman rmi ${DOCKER_HOST_ALICLOUD}/${DOCKER_GROUP_ALICLOUD_NAME}/${pom.artifactId}:${currentBuild.number}
+                        podman tag ${imagereference} ${DOCKER_HOST_ALICLOUD}/${DOCKER_GROUP_ALICLOUD_NAME}/${pom.artifactId}:${params.RELEASE_VERSION}
+                        podman push --authfile ${ALICLOUDNPREGISTRYAUTH} --tls-verify=false ${DOCKER_HOST_ALICLOUD}/${DOCKER_GROUP_ALICLOUD_NAME}/${pom.artifactId}:${params.RELEASE_VERSION}
+                        podman rmi ${DOCKER_HOST_ALICLOUD}/${DOCKER_GROUP_ALICLOUD_NAME}/${pom.artifactId}:${params.RELEASE_VERSION}
                         podman rmi ${imagereference}
                         """
                                  }
@@ -273,10 +279,10 @@ pipeline {
                                     git config user.email "cicd@smartplay-np.lcsd.hksarg"
                                     git config user.name "cicd"
                                     git status
-                                    kustomize edit set image image-registry.openshift-image-registry.svc:5000/cicd-common/${pom.artifactId}:latest=${DOCKER_HOST_ALICLOUD}/${DOCKER_GROUP_ALICLOUD_NAME}/${pom.artifactId}:${currentBuild.number}
+                                    kustomize edit set image image-registry.openshift-image-registry.svc:5000/cicd-common/${pom.artifactId}:latest=${DOCKER_HOST_ALICLOUD}/${DOCKER_GROUP_ALICLOUD_NAME}/${pom.artifactId}:${params.RELEASE_VERSION}
                                     git add ./kustomization.yaml
                                     git commit -m "CI Image Update"
-                                    git tag -a v0.0.1 -m "CI Image Update" --force
+                                    git tag -a ${params.RELEASE_VERSION} -m "CI Image Update" --force
                                     git push origin main
                                     git push --tags --force
                                     rm -f /tmp/keyfile.txt
