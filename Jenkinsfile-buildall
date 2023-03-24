@@ -5,8 +5,7 @@ pipeline {
     agent
     {
         node {
-                label 'master'
-                customWorkspace "${env.JobPath}"
+                label 'maven'                
               }
     }
     stages
