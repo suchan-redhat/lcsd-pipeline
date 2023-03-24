@@ -14,6 +14,7 @@ pipeline {
             steps {
                 script {
                     if (!params.containsKey("JENKINS_FOLDER") 
+                    || !params.containsKey("RELEASE_VERSION")
                         ) {
                             //   GITEA_ORGANIZATION -> e.g. demo
                             //   GITEA_PROJECT -> e.g. springboot-helloworld
@@ -29,6 +30,7 @@ pipeline {
                             ])
                         }
                     if (params.JENKINS_FOLDER.isEmpty()
+                    || params.RELEASE_VERSION.isEmpty()
                     ) {
                         error("Missing Mandatory Paramters")
                     }
