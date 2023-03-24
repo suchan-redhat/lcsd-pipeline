@@ -1,0 +1,56 @@
+def listOfProjects = []
+pipeline {
+    agent
+    {
+        node {
+                label 'master'
+                customWorkspace "${env.JobPath}"
+              }
+    }
+    stages
+    {
+        stage('Check Parameters') {
+            steps {
+                script {
+                    if (!params.containsKey("JENKINS_FOLDER") 
+                        ) {
+                            //   GITEA_ORGANIZATION -> e.g. demo
+                            //   GITEA_PROJECT -> e.g. springboot-helloworld
+                            //   BUILD_AND_DEPLOY_TO_CONTAINER -> true
+                            properties([
+                                parameters([
+                                    string(
+                                        name: 'JENKINS_FOLDER',
+                                        description: 'Jenkins Folder Name, should be smartplay',
+                                        trim: true
+                                    )
+                                ])
+                            ])
+                        }
+                    if (params.GITEA_ORGANIZATION.isEmpty()
+                    ) {
+                        error("Missing Mandatory Paramters")
+                    }
+                    
+                }
+            }
+        }
+        stage ('Read Release list') {
+            steps {
+                def file = new File("release.txt" )
+                def lines = file.readLines()
+                for (line in lines) {
+                    listOfProjects.add(line.split(":"))
+                }
+                echo "${listOfProjects}"
+            }
+        }
+        // stage ('Invoke_pipelineA') {
+        //     steps {
+        //         build job: 'pipelineA', parameters: [
+        //         string(name: 'param1', value: "value1")
+        //         ]
+        //     }
+        // }
+    }
+}
