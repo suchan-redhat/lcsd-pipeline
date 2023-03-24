@@ -71,10 +71,10 @@ pipeline {
          stage ('Invoke Pipelines') {
              steps {
                 script {
-                    listOfProjects.each() {
+                    for (int i = 0; i < listOfProjects.size(); i++) { {
                         echo "${it}"
-                        build job: "${params.JENKINS_FOLDER}/${it[0]}", parameters: [
-                        string(name: 'RELEASE_VERSION', value: "${it[1]}")
+                        build job: "${params.JENKINS_FOLDER}/${listOfProjects[i][0]}", parameters: [
+                        string(name: 'RELEASE_VERSION', value: "${listOfProjects[i][1]}")
                         ]
                     }
                 }
