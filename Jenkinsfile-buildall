@@ -68,12 +68,14 @@ pipeline {
                 }
             }
         }
-        // stage ('Invoke_pipelineA') {
-        //     steps {
-        //         build job: 'pipelineA', parameters: [
-        //         string(name: 'param1', value: "value1")
-        //         ]
-        //     }
-        // }
+         stage ('Invoke Pipelines') {
+             steps {
+                listOfProjects.each() {
+                    build job: "${params.JENKINS_FOLDER}/${it[0]}", parameters: [
+                    string(name: 'RELEASE_VERSION', value: "${it[1]}")
+                    ]
+                }
+             }
+         }
     }
 }
