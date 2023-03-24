@@ -1,4 +1,6 @@
 def listOfProjects = []
+def GITTEA_HOST = "gitea-app-cicd.smartplay-np.lcsd.hksarg"
+def GITTEA_PORT = "2222"
 pipeline {
     agent
     {
@@ -35,6 +37,17 @@ pipeline {
                 }
             }
         }
+        stage('checkout') {
+            steps {
+                checkout(
+                    [
+                        $class: 'GitSCM', branches: [[name: "${params.RELEASE_VERSION}"]],
+                        userRemoteConfigs:[[credentialsId: 'GITEA-APPS-DEPLOY',
+                        url:"ssh://git@${GITTEA_HOST}:${GITTEA_PORT}/demo/release"]]
+                    ])                
+            }
+        }
+
         stage ('Read Release list') {
             steps {
                 def file = new File("release.txt" )
