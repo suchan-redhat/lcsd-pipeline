@@ -57,9 +57,10 @@ pipeline {
         stage ('Read Release list') {
             steps {
                 script {
-                    def lines = readFile("release.txt")
-                    echo "${listOfProjects}"
-                    //def lines = file.readLines()
+                    def file = readFile("release.txt").toString()
+                    echo "${file}"
+                    def lines = file.readLines()
+                    echo "${lines}"
                     for (line in lines) {
                         listOfProjects.add(line.split(":"))
                     }
