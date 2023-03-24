@@ -25,6 +25,11 @@ pipeline {
                                         name: 'JENKINS_FOLDER',
                                         description: 'Jenkins Folder Name, should be smartplay',
                                         trim: true
+                                    ),
+                                    string(
+                                        name: 'RELEASE_VERSION',
+                                        description: 'Release in vX.Y.Z semver',
+                                        trim: true
                                     )
                                 ])
                             ])
