@@ -5,7 +5,7 @@ pipeline {
     agent
     {
         node {
-                label 'any'                
+                label 'maven'                
               }
     }
     stages
@@ -72,7 +72,7 @@ pipeline {
              steps {
                 script {
                     for (int i = 0; i < listOfProjects.size(); i++) {   
-                        stage("${listOfProjects[i][0]}") {
+                        stage("library building: ${listOfProjects[i][0]}") {
                             echo "building ${listOfProjects[i][0]}"
                             build job: "${params.JENKINS_FOLDER}/${listOfProjects[i][0]}", parameters: [
                             string(name: 'RELEASE_VERSION', value: "${listOfProjects[i][1]}")
