@@ -158,8 +158,7 @@ pipeline {
                             openshift.withProject('cicddemo-dev'){
                                 def bc = openshift.selector("bc/${pom.artifactId}")
                                 if (!bc.exists()) {
-                                    //def bcResult = openshift.raw("new-build  --name ${pom.artifactId} --binary=true --to-docker=true --to=${DOCKER_HOST_ONPRIM}/${DOCKER_GROUP_NAME}/${pom.artifactId}:latest --strategy=source --push-secret docker-cicd --image-stream=cicd-common/redhat-ubi8-openjdk-11:1.14")
-                                    def bcResult = openshift.raw("new-build  --name ${pom.artifactId} --binary=true --to-docker=true --to=${DOCKER_HOST_ONPRIM}/${DOCKER_GROUP_NAME}/${pom.artifactId}:latest --strategy=source --image-stream=cicd-common/redhat-ubi8-openjdk-11:1.14")                                    
+                                    def bcResult = openshift.raw("new-build  --name ${pom.artifactId} --binary=true --to-docker=true --to=${DOCKER_HOST_ONPRIM}/${DOCKER_GROUP_NAME}/${pom.artifactId}:latest --strategy=source --push-secret docker-cicd --image-stream=cicd-common/redhat-ubi8-openjdk-11:1.14")
                                     echo "${bcResult.out}"
                                 }
                                 def result = openshift.raw("start-build --follow ${pom.artifactId} --from-file=./${pom.artifactId}-${pom.version}.jar")
