@@ -38,11 +38,6 @@ pipeline {
                                         trim: true
                                     ),
                                     string(
-                                        name: 'GITEA_PROJECT',
-                                        description: 'Project Name in Gitea, expect in service name',
-                                        trim: true
-                                    ),
-                                    string(
                                         name: 'RELEASE_VERSION',
                                         description: 'Release in vX.Y.Z semver',
                                         trim: true
@@ -55,7 +50,6 @@ pipeline {
                             ])
                         }
                     if (params.GITEA_ORGANIZATION.isEmpty() 
-                    || params.GITEA_PROJECT.isEmpty()
                     || params.RELEASE_VERSION.isEmpty()
                     ) {
                         error("Missing Mandatory Paramters")
@@ -70,7 +64,7 @@ pipeline {
                     [
                         $class: 'GitSCM', branches: [[name: "${params.RELEASE_VERSION}"]],
                         userRemoteConfigs:[[credentialsId: 'GITEA-APPS-DEPLOY',
-                        url:"ssh://git@${GITTEA_HOST}:${GITTEA_PORT}/${params.GITEA_ORGANIZATION}/${params.GITEA_PROJECT}"]]
+                        url:"ssh://git@${GITTEA_HOST}:${GITTEA_PORT}/${params.GITEA_ORGANIZATION}/${env.JOB_NAME}"]]
                     ])
                 script {
                     def pomFile = 'pom.xml'
@@ -216,7 +210,7 @@ pipeline {
                                 sh """
                                   rm -rf springboot-helloworld
                                   export GIT_SSH_COMMAND="ssh -i ${keyfile} -o IdentitiesOnly=yes -o StrictHostKeyChecking=no" 
-                                  git clone 'ssh://git@${GITTEA_OPS_HOST}:${GITTEA_OPS_PORT}/${params.GITEA_ORGANIZATION}/${params.GITEA_PROJECT}'
+                                  git clone 'ssh://git@${GITTEA_OPS_HOST}:${GITTEA_OPS_PORT}/${params.GITEA_ORGANIZATION}/${env.JOB_NAME}'
                                   cd springboot-helloworld/environments/dev
                                   git config user.email "cicd@smartplay-np.lcsd.hksarg"
                                   git config user.name "cicd"
@@ -282,7 +276,7 @@ pipeline {
                                     mkdir -p /tmp/git-ops
                                     cd /tmp/git-ops
                                     export GIT_SSH_COMMAND="ssh -i /tmp/keyfile.txt -o IdentitiesOnly=yes -o StrictHostKeyChecking=no" 
-                                    git clone 'ssh://git@${GITTEA_OPS_ALICLOUD_HOST}:${GITTEA_OPS_ALICLOUD_PORT}/${params.GITEA_ORGANIZATION}/${params.GITEA_PROJECT}'
+                                    git clone 'ssh://git@${GITTEA_OPS_ALICLOUD_HOST}:${GITTEA_OPS_ALICLOUD_PORT}/${params.GITEA_ORGANIZATION}/${env.JOB_NAME}'
                                     cd springboot-helloworld/environments/dev
                                     git config user.email "cicd@smartplay-np.lcsd.hksarg"
                                     git config user.name "cicd"
