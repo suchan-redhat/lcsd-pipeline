@@ -49,12 +49,14 @@ pipeline {
 
         stage ('Read Release list') {
             steps {
-                def file = new File("release.txt" )
-                def lines = file.readLines()
-                for (line in lines) {
-                    listOfProjects.add(line.split(":"))
+                script {
+                    def file = new File("release.txt" )
+                    def lines = file.readLines()
+                    for (line in lines) {
+                        listOfProjects.add(line.split(":"))
+                    }
+                    echo "${listOfProjects}"
                 }
-                echo "${listOfProjects}"
             }
         }
         // stage ('Invoke_pipelineA') {
