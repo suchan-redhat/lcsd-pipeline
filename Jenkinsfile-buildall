@@ -72,7 +72,7 @@ pipeline {
              steps {
                 script {
                     for (int i = 0; i < listOfProjects.size(); i++) { {
-                        echo "${it}"
+                        echo "${i}"
                         build job: "${params.JENKINS_FOLDER}/${listOfProjects[i][0]}", parameters: [
                         string(name: 'RELEASE_VERSION', value: "${listOfProjects[i][1]}")
                         ]
