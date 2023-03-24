@@ -28,7 +28,7 @@ pipeline {
                                 ])
                             ])
                         }
-                    if (params.GITEA_ORGANIZATION.isEmpty()
+                    if (params.JENKINS_FOLDER.isEmpty()
                     ) {
                         error("Missing Mandatory Paramters")
                     }
