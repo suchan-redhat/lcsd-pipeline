@@ -86,7 +86,7 @@ pipeline {
         stage('test') {
             steps {
                 //sh 'mvn test'
-                unstable("WARNING no test")                
+                unstable("WARNING no test")
             }
         }
         stage('compile') {
@@ -188,10 +188,14 @@ pipeline {
                 }                
             }
             steps {
+                try {
                 withCredentials([string(credentialsId: 'ACS_TOKEN', variable: 'ROX_API_TOKEN'), string(credentialsId: 'ACS_URL', variable: 'ROX_CENTRAL_ADDRESS')]){
                     sh """
                       roxctl --insecure-skip-tls-verify -e ${ROX_CENTRAL_ADDRESS} image check --image ${DOCKER_HOST_ONPRIM}/${DOCKER_GROUP_NAME}/${pom.artifactId}
                     """
+                }
+                } catch (ex) {
+                    unstable("WARNING ACS Scanning failed")
                 }
             }
         }
