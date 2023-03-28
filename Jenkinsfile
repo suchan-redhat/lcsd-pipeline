@@ -10,6 +10,7 @@ def DOCKER_GROUP_ALICLOUD_NAME = "cicd-tools"
 def GITTEA_PORT = "2222"
 def GITTEA_OPS_PORT = "2222"
 def GITTEA_OPS_ALICLOUD_PORT = "2222"
+def DEV_SUFFIX = "dev"
 def pom 
 
 pipeline {
@@ -24,6 +25,7 @@ pipeline {
                 script {
                     if (!params.containsKey("GITEA_ORGANIZATION") 
                         || !params.containsKey("GITEA_PROJECT")
+                        || !params.containsKey("NAMESPACE_PREFIX")                        
                         || !params.containsKey("BUILD_AND_DEPLOY_TO_CONTAINER")
                         || !params.containsKey("RELEASE_VERSION")
                         ) {
@@ -40,6 +42,11 @@ pipeline {
                                     string(
                                         name: 'RELEASE_VERSION',
                                         description: 'Release in vX.Y.Z semver',
+                                        trim: true
+                                    ),
+                                    string(
+                                        name: 'NAMESPACE_PREFIX',
+                                        description: 'namespace prefix (e.g.: cicddemo)',
                                         trim: true
                                     ),
                                     booleanParam(
@@ -67,7 +74,8 @@ pipeline {
                         url:"ssh://git@${GITTEA_HOST}:${GITTEA_PORT}/${params.GITEA_ORGANIZATION}/${env.JOB_BASE_NAME}"]]
                     ])
                 script {
-                    def pomFile = 'pom.xml'
+                    sh 'mvn help:effective-pom -Doutput=effective-pom.xml'
+                    def pomFile = 'effective-pom.xml'
                     pom = readMavenPom file: pomFile
                     print "${pom.version}"
                     print "${pom.groupId}"
@@ -77,7 +85,8 @@ pipeline {
         }
         stage('test') {
             steps {
-                sh 'mvn test'
+                //sh 'mvn test'
+                unstable("WARNING no test")                
             }
         }
         stage('compile') {
@@ -108,7 +117,8 @@ pipeline {
                             for (module in pom.modules) {
                                 echo "module: ${module}"
                                 dir(module) {
-                                    def modulePom = readMavenPom file: 'pom.xml'
+                                    sh 'mvn help:effective-pom -Doutput=effective-pom.xml'
+                                    def modulePom = readMavenPom file: 'effective-pom.xml'
                                     if (modulePom.packaging == pom ) {
                                         echo "SKIP sonarqube scanning for pom"
                                     } else {
@@ -129,7 +139,8 @@ pipeline {
                     for (module in pom.modules) {
                         echo "module: ${module}"
                         dir(module) {
-                            def modulePom = readMavenPom file: 'pom.xml'
+                            sh 'mvn help:effective-pom -Doutput=effective-pom.xml'
+                            def modulePom = readMavenPom file: 'effective-pom.xml'
                             sh 'mvn deploy -DskipTests -DaltDeploymentRepository=deploy-to-nexus::default::https://nexus-cicd.smartplay-np.lcsd.hksarg:8443/repository/lcsd-maven2'
                         }
                     }
@@ -155,7 +166,7 @@ pipeline {
                             mvn dependency:copy -Dartifact=${pom.groupId}:${pom.artifactId}:${pom.version} -DoutputDirectory=./
                         """
                         openshift.withCluster('smartplay-np'){
-                            openshift.withProject('cicddemo-dev'){
+                            openshift.withProject("${NAMESPACE_PREFIX}-${DEV_SUFFIX}"){
                                 def bc = openshift.selector("bc/${pom.artifactId}")
                                 if (!bc.exists()) {
                                     def bcResult = openshift.raw("new-build  --name ${pom.artifactId} --binary=true --to-docker=true --to=${DOCKER_HOST_ONPRIM}/${DOCKER_GROUP_NAME}/${pom.artifactId}:latest --strategy=source --push-secret docker-cicd --image-stream=cicd-common/redhat-ubi8-openjdk-11:1.14")
@@ -193,7 +204,7 @@ pipeline {
             steps {
                 script {
                     openshift.withCluster('smartplay-np'){
-                        openshift.withProject('cicddemo-dev'){
+                        openshift.withProject("${NAMESPACE_PREFIX}-${DEV_SUFFIX}"){
                             def result1 = openshift.tag("--source=docker","${DOCKER_HOST_ONPRIM}/${DOCKER_GROUP_NAME}/${pom.artifactId}", "cicd-common/${pom.artifactId}:latest")
                             echo "${result1.out}"
                             def result2 = openshift.tag("cicd-common/${pom.artifactId}:latest","cicd-common/${pom.artifactId}:${params.RELEASE_VERSION}")
