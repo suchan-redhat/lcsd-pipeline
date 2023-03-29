@@ -23,7 +23,7 @@ pipeline {
         stage('Check Parameters') {
             steps {
                 script {
-                    if (!params.containsKey("GITEA_ORGANIZATION") 
+                    if (!params.containsKey("GITEA_ORGANIZATION")
                         || !params.containsKey("GITEA_PROJECT")
                         || !params.containsKey("NAMESPACE_PREFIX")                        
                         || !params.containsKey("BUILD_AND_DEPLOY_TO_CONTAINER")
@@ -56,7 +56,8 @@ pipeline {
                                 ])
                             ])
                         }
-                    if (params.GITEA_ORGANIZATION.isEmpty() 
+                    if (params.GITEA_ORGANIZATION.isEmpty()
+                    || params.NAMESPACE_PREFIX.isEmpty()
                     || params.RELEASE_VERSION.isEmpty()
                     ) {
                         error("Missing Mandatory Paramters")
@@ -74,9 +75,11 @@ pipeline {
                         url:"ssh://git@${GITTEA_HOST}:${GITTEA_PORT}/${params.GITEA_ORGANIZATION}/${env.JOB_BASE_NAME}"]]
                     ])
                 script {
-                    sh 'mvn help:effective-pom -Doutput=effective-pom.xml'
-                    def pomFile = 'effective-pom.xml'
+                    def pomFile = 'pom.xml'
                     pom = readMavenPom file: pomFile
+                    if (!pom.groupId) {
+                        pom.groupId = sh script: 'mvn  help:evaluate -Dexpression=project.groupId -q -DforceStdout', returnStdout: true
+                    }
                     print "${pom.version}"
                     print "${pom.groupId}"
                     print "${pom.artifactId}"
@@ -85,8 +88,13 @@ pipeline {
         }
         stage('test') {
             steps {
-                //sh 'mvn test'
-                unstable("WARNING no test")
+                script {
+                    try {
+                        sh 'mvn test'
+                    } catch (err) {
+                        unstable("WARNING no test")
+                    }
+                }
             }
         }
         stage('compile') {
@@ -117,8 +125,11 @@ pipeline {
                             for (module in pom.modules) {
                                 echo "module: ${module}"
                                 dir(module) {
-                                    sh 'mvn help:effective-pom -Doutput=effective-pom.xml'
-                                    def modulePom = readMavenPom file: 'effective-pom.xml'
+                                    
+                                    def modulePom = readMavenPom file: 'pom.xml'
+                                    if (!modulePom.groupId) {
+                                        modulePom.groupId = sh script: 'mvn  help:evaluate -Dexpression=project.groupId -q -DforceStdout', returnStdout: true
+                                    }
                                     if (modulePom.packaging == pom ) {
                                         echo "SKIP sonarqube scanning for pom"
                                     } else {
@@ -139,8 +150,10 @@ pipeline {
                     for (module in pom.modules) {
                         echo "module: ${module}"
                         dir(module) {
-                            sh 'mvn help:effective-pom -Doutput=effective-pom.xml'
-                            def modulePom = readMavenPom file: 'effective-pom.xml'
+                            def modulePom = readMavenPom file: 'pom.xml'
+                            if (!modulePom.groupId) {
+                                modulePom.groupId = sh script: 'mvn  help:evaluate -Dexpression=project.groupId -q -DforceStdout', returnStdout: true
+                            }
                             sh 'mvn deploy -DskipTests -DaltDeploymentRepository=deploy-to-nexus::default::https://nexus-cicd.smartplay-np.lcsd.hksarg:8443/repository/lcsd-maven2'
                         }
                     }
@@ -166,10 +179,10 @@ pipeline {
                             mvn dependency:copy -Dartifact=${pom.groupId}:${pom.artifactId}:${pom.version} -DoutputDirectory=./
                         """
                         openshift.withCluster('smartplay-np'){
-                            openshift.withProject("${NAMESPACE_PREFIX}-${DEV_SUFFIX}"){
+                            openshift.withProject("${params.NAMESPACE_PREFIX}-${DEV_SUFFIX}"){
                                 def bc = openshift.selector("bc/${pom.artifactId}")
                                 if (!bc.exists()) {
-                                    def bcResult = openshift.raw("new-build  --name ${pom.artifactId} --binary=true --to-docker=true --to=${DOCKER_HOST_ONPRIM}/${DOCKER_GROUP_NAME}/${pom.artifactId}:latest --strategy=source --push-secret docker-cicd --image-stream=cicd-common/redhat-ubi8-openjdk-11:1.14")
+                                    def bcResult = openshift.raw("new-build  --name ${pom.artifactId} --binary=true --to-docker=true --to=${DOCKER_HOST_ONPRIM}/${DOCKER_GROUP_NAME}/${pom.artifactId}:latest --strategy=source --push-secret docker-cicd --image-stream=cicd-common/redhat-ubi8-openjdk-8:latest")
                                     echo "${bcResult.out}"
                                 }
                                 def result = openshift.raw("start-build --follow ${pom.artifactId} --from-file=./${pom.artifactId}-${pom.version}.jar")
@@ -185,17 +198,19 @@ pipeline {
             when {
                 expression {
                     return params.BUILD_AND_DEPLOY_TO_CONTAINER
-                }                
+                }
             }
             steps {
-                try {
-                withCredentials([string(credentialsId: 'ACS_TOKEN', variable: 'ROX_API_TOKEN'), string(credentialsId: 'ACS_URL', variable: 'ROX_CENTRAL_ADDRESS')]){
-                    sh """
-                      roxctl --insecure-skip-tls-verify -e ${ROX_CENTRAL_ADDRESS} image check --image ${DOCKER_HOST_ONPRIM}/${DOCKER_GROUP_NAME}/${pom.artifactId}
-                    """
-                }
-                } catch (ex) {
-                    unstable("WARNING ACS Scanning failed")
+                script {
+                    try {
+                        withCredentials([string(credentialsId: 'ACS_TOKEN', variable: 'ROX_API_TOKEN'), string(credentialsId: 'ACS_URL', variable: 'ROX_CENTRAL_ADDRESS')]){
+                            sh """
+                            roxctl --insecure-skip-tls-verify -e ${ROX_CENTRAL_ADDRESS} image check --image ${DOCKER_HOST_ONPRIM}/${DOCKER_GROUP_NAME}/${pom.artifactId}
+                            """
+                        }
+                    } catch (err) {
+                        unstable("ACS Scan ERROR")
+                    }
                 }
             }
         }
@@ -203,12 +218,12 @@ pipeline {
             when {
                 expression {
                     return params.BUILD_AND_DEPLOY_TO_CONTAINER
-                }                
+                }
             }
             steps {
                 script {
                     openshift.withCluster('smartplay-np'){
-                        openshift.withProject("${NAMESPACE_PREFIX}-${DEV_SUFFIX}"){
+                        openshift.withProject("${params.NAMESPACE_PREFIX}-${DEV_SUFFIX}"){
                             def result1 = openshift.tag("--source=docker","${DOCKER_HOST_ONPRIM}/${DOCKER_GROUP_NAME}/${pom.artifactId}", "cicd-common/${pom.artifactId}:latest")
                             echo "${result1.out}"
                             def result2 = openshift.tag("cicd-common/${pom.artifactId}:latest","cicd-common/${pom.artifactId}:${params.RELEASE_VERSION}")
@@ -220,17 +235,77 @@ pipeline {
                             imagereference  =istag.image.dockerImageReference
                             echo "IMAGEREF ${imagereference}"
                         }
+                         openshift.withProject('cicd-tools'){
+                            def argoProject = openshift.selector("appproject/${params.NAMESPACE_PREFIX}-${pom.artifactId}")
+                            if (!argoProject.exists()) {
+                                def newArgoProject = [
+                                    "apiVersion": "argoproj.io/v1alpha1",
+                                    "kind": "AppProject",
+                                    "metadata": [
+                                        "name": "${params.NAMESPACE_PREFIX}-${pom.artifactId}",
+                                        "namespace": "cicd-tools"
+                                    ],
+                                    "spec": [
+                                        "clusterResourceWhitelist" : [
+                                            [
+                                                "group": "*",
+                                                "kind": "*"
+                                            ]
+                                        ],
+                                        "destinations": [
+                                            [
+                                                "namespace": "*",
+                                                "server": "*"
+                                            ]
+                                        ],
+                                        "sourceRepos": [
+                                            "*"
+                                        ]
+                                    ]
+                                ]
+                                openshift.create(newArgoProject,'--save-config', '--validate' )
+                            }
+                            def argoApplication = openshift.selector("application/${params.NAMESPACE_PREFIX}-${pom.artifactId}-${DEV_SUFFIX}")
+                            if (!argoApplication.exists()) {
+                                def newArgoApplication = [
+                                    "apiVersion": "argoproj.io/v1alpha1",
+                                    "kind": "Application",
+                                    "metadata": [
+                                        "name": "${params.NAMESPACE_PREFIX}-${pom.artifactId}-${DEV_SUFFIX}",
+                                        "namespace": "cicd-tools"
+                                    ],
+                                    "spec": [
+                                        "destination": [
+                                            "namespace": "${params.NAMESPACE_PREFIX}-${DEV_SUFFIX}",
+                                            "server": "https://kubernetes.default.svc"
+                                        ],
+                                        "project": "${pom.artifactId}",
+                                        "source": [
+                                            "path": "environments/dev",
+                                            "repoURL": "https://${GITTEA_OPS_HOST}:8443/${params.GITEA_ORGANIZATION}/${env.JOB_BASE_NAME}",
+                                            targetRevision: "main"
+                                        ],
+                                        "syncPolicy": [
+                                            "automated": [
+                                                "selfHeal": true
+                                            ]
+                                        ]
+                                    ]
+                                ]
+                                openshift.create(newArgoApplication,'--save-config', '--validate' )
+                            } 
+                        }
                         dir('git-ops') {
                             withCredentials([sshUserPrivateKey(credentialsId: 'GITEA-APPS-DEPLOY', keyFileVariable: 'keyfile')]) {
                                 sh """
-                                  rm -rf springboot-helloworld
+                                  rm -rf ${env.JOB_BASE_NAME}
                                   export GIT_SSH_COMMAND="ssh -i ${keyfile} -o IdentitiesOnly=yes -o StrictHostKeyChecking=no" 
                                   git clone 'ssh://git@${GITTEA_OPS_HOST}:${GITTEA_OPS_PORT}/${params.GITEA_ORGANIZATION}/${env.JOB_BASE_NAME}'
-                                  cd springboot-helloworld/environments/dev
+                                  cd ${env.JOB_BASE_NAME}/environments/dev
                                   git config user.email "cicd@smartplay-np.lcsd.hksarg"
                                   git config user.name "cicd"
                                   git status
-                                  kustomize edit set image image-registry.openshift-image-registry.svc:5000/cicd-common/${pom.artifactId}:latest=${imagereference}
+                                  kustomize edit set image IMAGE:VERSION=${imagereference}
                                   git add ./kustomization.yaml
                                   git commit -m "CI Image Update"
                                   git tag -a ${params.RELEASE_VERSION} -m "CI Image Update" --force
@@ -245,13 +320,13 @@ pipeline {
                             echo "${resultLogin.out}"
                             
                             try {
-                                def resultSyn = openshift.raw("rsh argocd-application-controller-0  argocd --config /tmp/config app sync \"cicd-tools/${pom.artifactId}-dev\"")
+                                def resultSyn = openshift.raw("rsh argocd-application-controller-0  argocd --config /tmp/config app sync \"cicd-tools/${params.NAMESPACE_PREFIX}-${pom.artifactId}-${DEV_SUFFIX}\"")
                                 echo "${resultSyn.out}"
                             } catch (Exception e){
                                 echo "Exception "+e.toString() +" expectred"
                             }
                             sh 'sleep 3'
-                            def resultWait = openshift.raw("rsh argocd-application-controller-0  argocd --config /tmp/config app wait \"cicd-tools/${pom.artifactId}-dev\"")
+                            def resultWait = openshift.raw("rsh argocd-application-controller-0  argocd --config /tmp/config app wait \"cicd-tools/${params.NAMESPACE_PREFIX}-${pom.artifactId}-${DEV_SUFFIX}\"")
                             echo "${resultWait.out}"
                         }
                     }
@@ -264,7 +339,7 @@ pipeline {
             when {
                 expression {
                     return params.BUILD_AND_DEPLOY_TO_CONTAINER
-                }                
+                }
             }
             agent {
                 node {
@@ -273,6 +348,39 @@ pipeline {
             }
             steps {
                 script {
+                    //create projects and deployment keys if not there
+                    openshift.withCluster('alicloud-nonprod'){
+                        openshift.withProject('cicd-tools'){
+                            def pod = openshift.selector('pod',['app':'gitea-gitea']).object()
+                            echo pod.metadata.name
+                            withCredentials([string(credentialsId: 'ALICLOUD-NONPROD-GITEA-OPS-API-TOKEN', variable: 'ALICLOUDNONPRODGITEAOPSAPITOKEN')]) {
+                                try {
+                                    def thisResult = openshift.raw("exec ${pod.metadata.name} -- curl -k -H \"Authorization: token  ${ALICLOUDNONPRODGITEAOPSAPITOKEN}\" -H \"content-type: application/json\"  -XPOST \"http://localhost:3000/api/v1/orgs/demo/repos\" -d '{\"name\": \"${env.JOB_BASE_NAME}\"}' ")
+                                    echo ${thisResult.out}
+                                } catch (ignore) {}
+                                try {
+                                    def thisResult = openshift.raw("exec ${pod.metadata.name} -- curl -k -H \"Authorization: token  ${ALICLOUDNONPRODGITEAOPSAPITOKEN}\" -H \"content-type: application/json\" -XPOST \"http://localhost:3000/api/v1/orgs/demo/repos/${env.JOB_BASE_NAME}/keys\" -d '{\"key\":\"ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAACAQDKbyYrTQnsQ8Yb+9gebzQ+yPLcasVroAXWwavSzZwimT9YDirIeM9YjGlRUTla+qiEMORE3ZcUlIV5/reR5HoxrsK05TIwJgxq89+Q9uCjMM6sSl1p0f5ngfgSfqk3GZUUktgexfrHClbpidLyyS73nYl2CqmaSvyi2B0Xdc+KsEDZpvXPfRRQFWbYjCwvQu8Q5AQKPTMCN44hsnqXHayBw1k/3orbb5ipV+yHr28DqRk/sZY28zxJiC2UrCHkXGdow1ISxhSFJTLDlsYbsTM/5uA97+t66lBkqkFf1RQZvy0qdtNni2f0BqJKV3Tv8HOMGHFOv8pYT7yeZ/84yR2Ok1Ep4B3GyqTmsGiWxLnExtGTBscUc6PXwidojpoxvUse0tET0+nzktrVeNF72tCurF1Y4jmpVifDcLnJs7g7DbxTtSJQTGqVSmJRrXYqpBQUOSROZYx5gMBXZbCySbSyBXE7B+UQxUtG6IenZq7cpUpx2rsyB0C4Q+YQhfMVWKBd1QAdbBd1dyLOmgdWaMYvOvJxpkkwVAewDLN2hTlIjpbkWGptj5erWCjPEOnPQ6E0/mwAb0osDpwaJznoUXTFO2gn/d0peEA4yqM8R4ewnvd/LMGDbf4+PzkigvmgE06YIe6HzaV31XSyNnauxUeJ7UETMFHB42dv2jeaSR7q3Q== noname\",\"title\":\"cicd\",\"read_only\":false}' ")
+                                    echo ${thisResult.out}
+                                } catch (ignore) {}
+                            }
+                            withCredentials([sshUserPrivateKey(credentialsId: 'GITEA-APPS-DEPLOY', keyFileVariable: 'keyfile')]) {
+                                dir("alicloud-gitops") {
+                                    sh """
+                                        rm -rf ${env.JOB_BASE_NAME}
+                                        export GIT_SSH_COMMAND="ssh -i ${keyfile} -o IdentitiesOnly=yes -o StrictHostKeyChecking=no" 
+
+                                        git clone 'ssh://git@${GITTEA_OPS_HOST}:${GITTEA_OPS_PORT}/${params.GITEA_ORGANIZATION}/${env.JOB_BASE_NAME}'
+                                        rm -rf ${env.JOB_BASE_NAME}/.git
+                                    """
+                                    def thisResult = openshift.raw("exec ${pod.metadata.name} -- mkdir /tmp/${env.JOB_BASE_NAME}-${env.BUILD_NUMBER}")
+                                    echo ${thisResult.out}
+                                    thisResult = openshift.raw("cp ./${env.JOB_BASE_NAME} ${pod.metadata.name}:/tmp/${env.JOB_BASE_NAME}-${env.BUILD_NUMBER}/source-dev")
+                                    echo ${thisResult.out}                                    
+                                }
+                            }
+                        }
+                    }
+                    
                     withCredentials([file(credentialsId: 'DOCKER-CICD-AUTH', variable: 'DOCKERCICDAUTH'), 
                                  file(credentialsId: 'ALICLOUD-NP-REGISTRY-AUTH', variable: 'ALICLOUDNPREGISTRYAUTH')]) {
                         sh """
@@ -285,45 +393,106 @@ pipeline {
                                  }
                     openshift.withCluster('alicloud-nonprod'){
                         openshift.withProject('cicd-tools'){
+                            def argoProject = openshift.selector("appproject/${params.NAMESPACE_PREFIX}-${pom.artifactId}")
+                            if (!argoProject.exists()) {
+                                def newArgoProject = [
+                                    "apiVersion": "argoproj.io/v1alpha1",
+                                    "kind": "AppProject",
+                                    "metadata": [
+                                        "name": "${params.NAMESPACE_PREFIX}-${pom.artifactId}",
+                                        "namespace": "cicd-tools"
+                                    ],
+                                    "spec": [
+                                        "clusterResourceWhitelist" : [
+                                            [
+                                                "group": "*",
+                                                "kind": "*"
+                                            ]
+                                        ],
+                                        "destinations": [
+                                            [
+                                                "namespace": "*",
+                                                "server": "*"
+                                            ]
+                                        ],
+                                        "sourceRepos": [
+                                            "*"
+                                        ]
+                                    ]
+                                ]
+                                openshift.create(newArgoProject,'--save-config', '--validate' )
+                            }
+                            def argoApplication = openshift.selector("application/${params.NAMESPACE_PREFIX}-${pom.artifactId}-${DEV_SUFFIX}")
+                            if (!argoApplication.exists()) {
+                                def newArgoApplication = [
+                                    "apiVersion": "argoproj.io/v1alpha1",
+                                    "kind": "Application",
+                                    "metadata": [
+                                        "name": "${params.NAMESPACE_PREFIX}-${pom.artifactId}-${DEV_SUFFIX}",
+                                        "namespace": "cicd-tools"
+                                    ],
+                                    "spec": [
+                                        "destination": [
+                                            "namespace": "${params.NAMESPACE_PREFIX}-${DEV_SUFFIX}",
+                                            "server": "https://kubernetes.default.svc"
+                                        ],
+                                        "project": "${pom.artifactId}",
+                                        "source": [
+                                            "path": "environments/dev",
+                                            "repoURL": "https://${GITTEA_OPS_ALICLOUD_HOST}:3000/${params.GITEA_ORGANIZATION}/${env.JOB_BASE_NAME}",
+                                            targetRevision: "main"
+                                        ],
+                                        "syncPolicy": [
+                                            "automated": [
+                                                "selfHeal": true
+                                            ]
+                                        ]
+                                    ]
+                                ]
+                                openshift.create(newArgoApplication,'--save-config', '--validate' )
+                            }
+                        } 
+                        openshift.withProject('cicd-tools'){
                             withCredentials([sshUserPrivateKey(credentialsId: 'GITEA-APPS-DEPLOY', keyFileVariable: 'keyfile')]) {
-                                writeFile file: "gitcommand.txt", text: """
+                                writeFile file: "${env.JOB_BASE_NAME}-${env.BUILD_NUMBER}-gitcommand.txt", text: """
                                     rm -rf /tmp/git-ops
                                     mkdir -p /tmp/git-ops
                                     cd /tmp/git-ops
                                     export GIT_SSH_COMMAND="ssh -i /tmp/keyfile.txt -o IdentitiesOnly=yes -o StrictHostKeyChecking=no" 
                                     git clone 'ssh://git@${GITTEA_OPS_ALICLOUD_HOST}:${GITTEA_OPS_ALICLOUD_PORT}/${params.GITEA_ORGANIZATION}/${env.JOB_BASE_NAME}'
-                                    cd springboot-helloworld/environments/dev
+                                    cp -rf /tmp/${env.JOB_BASE_NAME}-${env.BUILD_NUMBER}/source-dev/* ${env.JOB_BASE_NAME}
+                                    cd ${env.JOB_BASE_NAME}/environments/dev
                                     git config user.email "cicd@smartplay-np.lcsd.hksarg"
                                     git config user.name "cicd"
                                     git status
-                                    kustomize edit set image image-registry.openshift-image-registry.svc:5000/cicd-common/${pom.artifactId}:latest=${DOCKER_HOST_ALICLOUD}/${DOCKER_GROUP_ALICLOUD_NAME}/${pom.artifactId}:${params.RELEASE_VERSION}
+                                    kustomize edit set image IMAGE:VERSION=${DOCKER_HOST_ALICLOUD}/${DOCKER_GROUP_ALICLOUD_NAME}/${pom.artifactId}:${params.RELEASE_VERSION}
                                     git add ./kustomization.yaml
                                     git commit -m "CI Image Update"
                                     git tag -a ${params.RELEASE_VERSION} -m "CI Image Update" --force
                                     git push origin main
                                     git push --tags --force
-                                    rm -f /tmp/keyfile.txt
-                                    rm -f /tmp/gitcommand.txt
+                                    rm -f /tmp/${env.JOB_BASE_NAME}-${env.BUILD_NUMBER}-keyfile.txt
+                                    rm -f /tmp/${env.JOB_BASE_NAME}-${env.BUILD_NUMBER}-gitcommand.txt
                                 """
                                 def pod = openshift.selector('pod',['app.kubernetes.io/name':'argocd-server']).object()
                                 echo pod.metadata.name
-                                def resultCp = openshift.raw("cp ${keyfile} ${pod.metadata.name}:/tmp/keyfile.txt")
+                                def resultCp = openshift.raw("cp ${keyfile} ${pod.metadata.name}:/tmp/${env.JOB_BASE_NAME}-${env.BUILD_NUMBER}-keyfile.txt")
                                 echo "${resultCp.out}"
-                                def resultCp2 = openshift.raw("cp gitcommand.txt ${pod.metadata.name}:/tmp/gitcommand.txt")
+                                def resultCp2 = openshift.raw("cp gitcommand.txt ${pod.metadata.name}:/tmp/${env.JOB_BASE_NAME}-${env.BUILD_NUMBER}-gitcommand.txt")
                                 echo "${resultCp2.out}"
-                                def resultExec = openshift.raw("exec ${pod.metadata.name} -- bash /tmp/gitcommand.txt")
+                                def resultExec = openshift.raw("exec ${pod.metadata.name} -- bash /tmp/${env.JOB_BASE_NAME}-${env.BUILD_NUMBER}-gitcommand.txt")
                                 echo "${resultExec.out}"
                                 def resultLogin = openshift.raw("rsh ${pod.metadata.name}  argocd --config /tmp/config  login  --insecure --core")
                                 echo "${resultLogin.out}"
                                 
                                 try {
-                                    def resultSyn = openshift.raw("rsh ${pod.metadata.name}  argocd --config /tmp/config app sync \"cicd-tools/${pom.artifactId}-dev\"")
+                                    def resultSyn = openshift.raw("rsh ${pod.metadata.name}  argocd --config /tmp/config app sync \"cicd-tools/${params.NAMESPACE_PREFIX}-${pom.artifactId}-dev\"")
                                     echo "${resultSyn.out}"
                                 } catch (Exception e){
                                     echo "Exception "+e.toString() +" expectred"
                                 }
                                 sh 'sleep 3'
-                                def resultWait = openshift.raw("rsh ${pod.metadata.name}   argocd --config /tmp/config app wait \"cicd-tools/${pom.artifactId}-dev\"")
+                                def resultWait = openshift.raw("rsh ${pod.metadata.name}   argocd --config /tmp/config app wait \"cicd-tools/${params.NAMESPACE_PREFIX}-${pom.artifactId}-dev\"")
                                 echo "${resultWait.out}"
                             }
                         }  
