@@ -280,7 +280,7 @@ pipeline {
                                             "namespace": "${params.NAMESPACE_PREFIX}-${DEV_SUFFIX}",
                                             "server": "https://kubernetes.default.svc"
                                         ],
-                                        "project": "${pom.artifactId}",
+                                        "project": "${params.NAMESPACE_PREFIX}-${pom.artifactId}",
                                         "source": [
                                             "path": "environments/dev",
                                             "repoURL": "https://${GITTEA_OPS_HOST}:8443/${params.GITEA_ORGANIZATION}/${env.JOB_BASE_NAME}",
@@ -308,18 +308,16 @@ pipeline {
                                   git status
                                   kustomize edit set image IMAGE:VERSION=${imagereference}
                                   git add ./kustomization.yaml
-                                  git commit -m "CI Image Update"
+                                  git commit -m "CI Image Update ${env.JOB_BASE_NAME}-${env.BUILD_NUMBER}"
                                   git tag -a ${params.RELEASE_VERSION} -m "CI Image Update" --force
                                   git push origin main
                                   git push --tags --force
                                 """
                             }
-                            
                         }
                         openshift.withProject('cicd-tools'){
                             def resultLogin = openshift.raw('rsh argocd-application-controller-0  argocd --config /tmp/config  login  --insecure --core')
                             echo "${resultLogin.out}"
-                            
                             try {
                                 def resultSyn = openshift.raw("rsh argocd-application-controller-0  argocd --config /tmp/config app sync \"cicd-tools/${params.NAMESPACE_PREFIX}-${pom.artifactId}-${DEV_SUFFIX}\"")
                                 echo "${resultSyn.out}"
@@ -356,12 +354,12 @@ pipeline {
                             echo pod.metadata.name
                             withCredentials([string(credentialsId: 'ALICLOUD-NONPROD-GITEA-OPS-API-TOKEN', variable: 'ALICLOUDNONPRODGITEAOPSAPITOKEN')]) {
                                 try {
-                                    def thisResult = openshift.raw("exec ${pod.metadata.name} -- curl -k -H \"Authorization: token  ${ALICLOUDNONPRODGITEAOPSAPITOKEN}\" -H \"content-type: application/json\"  -XPOST \"http://localhost:3000/api/v1/orgs/demo/repos\" -d '{\"name\": \"${env.JOB_BASE_NAME}\"}' ")
-                                    echo ${thisResult.out}
+                                    def thisResult = openshift.raw("exec ${pod.metadata.name} -- curl -k -H \"Authorization: token  ${ALICLOUDNONPRODGITEAOPSAPITOKEN}\" -H \"content-type: application/json\"  -XPOST \"http://localhost:3000/api/v1/orgs/${params.GITEA_ORGANIZATION}/repos\" -d '{\"name\": \"${env.JOB_BASE_NAME}\"}' ")
+                                    echo "${thisResult.out}"
                                 } catch (ignore) {}
                                 try {
-                                    def thisResult = openshift.raw("exec ${pod.metadata.name} -- curl -k -H \"Authorization: token  ${ALICLOUDNONPRODGITEAOPSAPITOKEN}\" -H \"content-type: application/json\" -XPOST \"http://localhost:3000/api/v1/orgs/demo/repos/${env.JOB_BASE_NAME}/keys\" -d '{\"key\":\"ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAACAQDKbyYrTQnsQ8Yb+9gebzQ+yPLcasVroAXWwavSzZwimT9YDirIeM9YjGlRUTla+qiEMORE3ZcUlIV5/reR5HoxrsK05TIwJgxq89+Q9uCjMM6sSl1p0f5ngfgSfqk3GZUUktgexfrHClbpidLyyS73nYl2CqmaSvyi2B0Xdc+KsEDZpvXPfRRQFWbYjCwvQu8Q5AQKPTMCN44hsnqXHayBw1k/3orbb5ipV+yHr28DqRk/sZY28zxJiC2UrCHkXGdow1ISxhSFJTLDlsYbsTM/5uA97+t66lBkqkFf1RQZvy0qdtNni2f0BqJKV3Tv8HOMGHFOv8pYT7yeZ/84yR2Ok1Ep4B3GyqTmsGiWxLnExtGTBscUc6PXwidojpoxvUse0tET0+nzktrVeNF72tCurF1Y4jmpVifDcLnJs7g7DbxTtSJQTGqVSmJRrXYqpBQUOSROZYx5gMBXZbCySbSyBXE7B+UQxUtG6IenZq7cpUpx2rsyB0C4Q+YQhfMVWKBd1QAdbBd1dyLOmgdWaMYvOvJxpkkwVAewDLN2hTlIjpbkWGptj5erWCjPEOnPQ6E0/mwAb0osDpwaJznoUXTFO2gn/d0peEA4yqM8R4ewnvd/LMGDbf4+PzkigvmgE06YIe6HzaV31XSyNnauxUeJ7UETMFHB42dv2jeaSR7q3Q== noname\",\"title\":\"cicd\",\"read_only\":false}' ")
-                                    echo ${thisResult.out}
+                                    def thisResult = openshift.raw("exec ${pod.metadata.name} -- curl -k -H \"Authorization: token  ${ALICLOUDNONPRODGITEAOPSAPITOKEN}\" -H \"content-type: application/json\" -XPOST \"http://localhost:3000/api/v1/repos/${params.GITEA_ORGANIZATION}/${env.JOB_BASE_NAME}/keys\" -d '{\"key\":\"ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAACAQDKbyYrTQnsQ8Yb+9gebzQ+yPLcasVroAXWwavSzZwimT9YDirIeM9YjGlRUTla+qiEMORE3ZcUlIV5/reR5HoxrsK05TIwJgxq89+Q9uCjMM6sSl1p0f5ngfgSfqk3GZUUktgexfrHClbpidLyyS73nYl2CqmaSvyi2B0Xdc+KsEDZpvXPfRRQFWbYjCwvQu8Q5AQKPTMCN44hsnqXHayBw1k/3orbb5ipV+yHr28DqRk/sZY28zxJiC2UrCHkXGdow1ISxhSFJTLDlsYbsTM/5uA97+t66lBkqkFf1RQZvy0qdtNni2f0BqJKV3Tv8HOMGHFOv8pYT7yeZ/84yR2Ok1Ep4B3GyqTmsGiWxLnExtGTBscUc6PXwidojpoxvUse0tET0+nzktrVeNF72tCurF1Y4jmpVifDcLnJs7g7DbxTtSJQTGqVSmJRrXYqpBQUOSROZYx5gMBXZbCySbSyBXE7B+UQxUtG6IenZq7cpUpx2rsyB0C4Q+YQhfMVWKBd1QAdbBd1dyLOmgdWaMYvOvJxpkkwVAewDLN2hTlIjpbkWGptj5erWCjPEOnPQ6E0/mwAb0osDpwaJznoUXTFO2gn/d0peEA4yqM8R4ewnvd/LMGDbf4+PzkigvmgE06YIe6HzaV31XSyNnauxUeJ7UETMFHB42dv2jeaSR7q3Q== noname\",\"title\":\"cicd\",\"read_only\":false}' ")
+                                    echo "${thisResult.out}"
                                 } catch (ignore) {}
                             }
                             withCredentials([sshUserPrivateKey(credentialsId: 'GITEA-APPS-DEPLOY', keyFileVariable: 'keyfile')]) {
@@ -373,15 +371,10 @@ pipeline {
                                         git clone 'ssh://git@${GITTEA_OPS_HOST}:${GITTEA_OPS_PORT}/${params.GITEA_ORGANIZATION}/${env.JOB_BASE_NAME}'
                                         rm -rf ${env.JOB_BASE_NAME}/.git
                                     """
-                                    def thisResult = openshift.raw("exec ${pod.metadata.name} -- mkdir /tmp/${env.JOB_BASE_NAME}-${env.BUILD_NUMBER}")
-                                    echo ${thisResult.out}
-                                    thisResult = openshift.raw("cp ./${env.JOB_BASE_NAME} ${pod.metadata.name}:/tmp/${env.JOB_BASE_NAME}-${env.BUILD_NUMBER}/source-dev")
-                                    echo ${thisResult.out}                                    
                                 }
                             }
                         }
                     }
-                    
                     withCredentials([file(credentialsId: 'DOCKER-CICD-AUTH', variable: 'DOCKERCICDAUTH'), 
                                  file(credentialsId: 'ALICLOUD-NP-REGISTRY-AUTH', variable: 'ALICLOUDNPREGISTRYAUTH')]) {
                         sh """
@@ -437,10 +430,10 @@ pipeline {
                                             "namespace": "${params.NAMESPACE_PREFIX}-${DEV_SUFFIX}",
                                             "server": "https://kubernetes.default.svc"
                                         ],
-                                        "project": "${pom.artifactId}",
+                                        "project": "${params.NAMESPACE_PREFIX}-${pom.artifactId}",
                                         "source": [
                                             "path": "environments/dev",
-                                            "repoURL": "https://${GITTEA_OPS_ALICLOUD_HOST}:3000/${params.GITEA_ORGANIZATION}/${env.JOB_BASE_NAME}",
+                                            "repoURL": "http://${GITTEA_OPS_ALICLOUD_HOST}:3000/${params.GITEA_ORGANIZATION}/${env.JOB_BASE_NAME}",
                                             targetRevision: "main"
                                         ],
                                         "syncPolicy": [
@@ -459,7 +452,7 @@ pipeline {
                                     rm -rf /tmp/git-ops
                                     mkdir -p /tmp/git-ops
                                     cd /tmp/git-ops
-                                    export GIT_SSH_COMMAND="ssh -i /tmp/keyfile.txt -o IdentitiesOnly=yes -o StrictHostKeyChecking=no" 
+                                    export GIT_SSH_COMMAND="ssh -i /tmp/${env.JOB_BASE_NAME}-${env.BUILD_NUMBER}-keyfile.txt -o IdentitiesOnly=yes -o StrictHostKeyChecking=no" 
                                     git clone 'ssh://git@${GITTEA_OPS_ALICLOUD_HOST}:${GITTEA_OPS_ALICLOUD_PORT}/${params.GITEA_ORGANIZATION}/${env.JOB_BASE_NAME}'
                                     cp -rf /tmp/${env.JOB_BASE_NAME}-${env.BUILD_NUMBER}/source-dev/* ${env.JOB_BASE_NAME}
                                     cd ${env.JOB_BASE_NAME}/environments/dev
@@ -467,8 +460,8 @@ pipeline {
                                     git config user.name "cicd"
                                     git status
                                     kustomize edit set image IMAGE:VERSION=${DOCKER_HOST_ALICLOUD}/${DOCKER_GROUP_ALICLOUD_NAME}/${pom.artifactId}:${params.RELEASE_VERSION}
-                                    git add ./kustomization.yaml
-                                    git commit -m "CI Image Update"
+                                    git add -A
+                                    git commit -m "CI Image Update ${env.JOB_BASE_NAME}-${env.BUILD_NUMBER}"
                                     git tag -a ${params.RELEASE_VERSION} -m "CI Image Update" --force
                                     git push origin main
                                     git push --tags --force
@@ -477,15 +470,21 @@ pipeline {
                                 """
                                 def pod = openshift.selector('pod',['app.kubernetes.io/name':'argocd-server']).object()
                                 echo pod.metadata.name
+                                def mkdirResult = openshift.raw("exec ${pod.metadata.name} -- mkdir /tmp/${env.JOB_BASE_NAME}-${env.BUILD_NUMBER}")
+                                echo "${mkdirResult}"
+                                def copySourceResult = openshift.raw("cp ./alicloud-gitops/${env.JOB_BASE_NAME} ${pod.metadata.name}:/tmp/${env.JOB_BASE_NAME}-${env.BUILD_NUMBER}/source-dev")
+                                echo "${copySourceResult}"
                                 def resultCp = openshift.raw("cp ${keyfile} ${pod.metadata.name}:/tmp/${env.JOB_BASE_NAME}-${env.BUILD_NUMBER}-keyfile.txt")
-                                echo "${resultCp.out}"
-                                def resultCp2 = openshift.raw("cp gitcommand.txt ${pod.metadata.name}:/tmp/${env.JOB_BASE_NAME}-${env.BUILD_NUMBER}-gitcommand.txt")
-                                echo "${resultCp2.out}"
+                                echo "copyied key"
+                                echo "${resultCp}"
+                                def resultCp2 = openshift.raw("cp ${env.JOB_BASE_NAME}-${env.BUILD_NUMBER}-gitcommand.txt ${pod.metadata.name}:/tmp/${env.JOB_BASE_NAME}-${env.BUILD_NUMBER}-gitcommand.txt")
+                                echo "${resultCp2}"
+                                echo "copyied command"
                                 def resultExec = openshift.raw("exec ${pod.metadata.name} -- bash /tmp/${env.JOB_BASE_NAME}-${env.BUILD_NUMBER}-gitcommand.txt")
-                                echo "${resultExec.out}"
+                                echo "${resultExec}"
+                                echo "run command"
                                 def resultLogin = openshift.raw("rsh ${pod.metadata.name}  argocd --config /tmp/config  login  --insecure --core")
-                                echo "${resultLogin.out}"
-                                
+                                echo "${resultLogin}"
                                 try {
                                     def resultSyn = openshift.raw("rsh ${pod.metadata.name}  argocd --config /tmp/config app sync \"cicd-tools/${params.NAMESPACE_PREFIX}-${pom.artifactId}-dev\"")
                                     echo "${resultSyn.out}"
