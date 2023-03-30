@@ -90,6 +90,7 @@ pipeline {
             steps {
                 script {
                     try {
+                        sh 'mvn versions:display-dependency-updates'
                         sh 'mvn test'
                     } catch (err) {
                         unstable("WARNING no test")
